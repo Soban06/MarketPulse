@@ -52,3 +52,67 @@ for spec in s.ALL_TABLES:
     comments = spark.sql(f"DESCRIBE TABLE {table}").where("col_name NOT LIKE '#%' AND col_name <> ''")
     assert comments.where("comment IS NULL OR comment = ''").count() == 0, f"{table} has uncommented columns"
     print(f"ok  {table:<45} {len(expected)} columns, key {spec.key}")
+
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### 2 · Real raw files read cleanly with the explicit schemas
+
+# COMMAND ----------
+
+batches = sorted(e.name.rstrip("/") for e in dbutils.fs.ls(cfg.landing_root))
+assert batches, f"No batches in {cfg.landing_root} -- upload one with extract/upload.py first"
+batch = cfg.batch_path(batches[-1])
+print(f"reading {batch}")
+
+
+def read_raw(path, schema, rescued=True):
+    reader = spark.read.schema(schema).option("multiLine", True)
+    if rescued:
+        reader = reader.option("rescuedDataColumn", s.RESCUED_DATA_COLUMN)
+    return reader.json(path)
+
+
+prices = read_raw(f"{batch}/prices/*.json", s.RAW_PRICES).withColumnsRenamed(s.PRICES_COLUMN_MAP)
+constituents = read_raw(f"{batch}/sp500_constituents.json", s.RAW_CONSTITUENTS).withColumnsRenamed(s.CONSTITUENTS_COLUMN_MAP)
+company_info = read_raw(f"{batch}/company_info/*.json", s.RAW_COMPANY_INFO, rescued=False).withColumnsRenamed(s.COMPANY_INFO_COLUMN_MAP)
+
+for name, df, spec in [("prices", prices, s.BRONZE_PRICES),
+                       ("constituents", constituents, s.BRONZE_CONSTITUENTS),
+                       ("company_info", company_info, s.BRONZE_COMPANY_INFO)]:
+    lineage = {"batch_id", "source_file", "load_timestamp"}
+    expected_cols = [c for c in spec.schema.fieldNames() if c not in lineage]
+    assert df.columns == expected_cols, f"{name}: {df.columns} != {expected_cols}"
+    assert all(t == "string" for _, t in df.dtypes), f"{name}: raw values must all be strings"
+    rows = df.count()
+    assert rows > 0, f"{name}: no rows read"
+    if s.RESCUED_DATA_COLUMN in df.columns:
+        drifted = df.where(F.col(s.RESCUED_DATA_COLUMN).isNotNull()).count()
+        assert drifted == 0, f"{name}: {drifted} rows have unexpected fields"
+    print(f"ok  {name:<13} {rows:>8,} rows, columns match bronze, no rescued data")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### 3 · String values cast cleanly to their silver types
+
+# COMMAND ----------
+
+cast_check = prices.select(
+    F.count("*").alias("rows"),
+    F.count(F.expr("try_cast(date AS DATE)")).alias("dates_ok"),
+    F.count(F.expr("try_cast(adj_close AS DOUBLE)")).alias("adj_close_ok"),
+    F.count(F.expr("try_cast(try_cast(volume AS DOUBLE) AS BIGINT)")).alias("volume_ok"),
+).first()
+display(prices.limit(5))
+print(cast_check)
+assert cast_check["dates_ok"] == cast_check["rows"], "some dates did not cast"
+print("All schema checks passed")
+
+# COMMAND ----------
+
+if dbutils.widgets.get("cleanup") == "true":
+    for schema in (cfg.bronze_schema, cfg.silver_schema):
+        spark.sql(f"DROP SCHEMA {cfg.catalog}.{schema} CASCADE")
+    print("Dropped test schemas")
