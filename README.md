@@ -56,10 +56,33 @@ _To be completed: Bronze and Silver data dictionaries (columns, types, primary k
 
 _To be completed: running a standard incremental load vs. a parameterized backfill._
 
-### Local extraction
+### One-time setup
+
+**Databricks**
+
+1. Create a Git folder from this repository (Workspace → your user folder → Create → Git folder).
+2. Open `notebooks/00_setup`, attach it to **Serverless** and run all. It creates the `raw`,
+   `bronze`, `silver` and `ops` schemas and the `raw.landing` Volume. The `catalog` widget
+   defaults to `workspace`.
+
+**Laptop** (extraction and upload)
 
 ```bash
 pip install -r requirements.txt
+winget install Databricks.DatabricksCLI
+databricks auth login --host https://<your-workspace>.cloud.databricks.com --profile marketpulse
+```
+
+`auth login` opens a browser to sign in and stores the `marketpulse` profile in
+`~/.databrickscfg`; `extract/upload.py` uses it by default.
+
+### Extract and upload a batch
+
+```bash
 python extract/ingest.py --mode full          # 10-year baseline for all S&P 500 tickers
 python extract/ingest.py --mode incremental   # re-pull the last month (captures adj-close revisions)
+python extract/upload.py                      # send every new local batch to the raw Volume
 ```
+
+`upload.py --batch-id <id>` re-sends one specific batch; add `--overwrite` to replace a batch
+that is already in the Volume.
