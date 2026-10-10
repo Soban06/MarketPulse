@@ -1,0 +1,20 @@
+{
+  "run_id": "20261010T133403Z_incremental",
+  "mode": "incremental",
+  "period": "1mo",
+  "started_at": "2026-10-10T13:34:03.188665+00:00",
+  "finished_at": "2026-10-10T13:37:32.148285+00:00",
+  "tickers_requested": 503,
+  "prices": {
+    "tickers_saved": 503,
+    "rows": 11060,
+    "failed": []
+  },
+  "company_info": {
+    "skipped": false,
+    "tickers_saved": 503,
+    "failed": []
+  },
+  "constituents": 503,
+  "size_bytes": 8443918
+}
