@@ -3,3 +3,4 @@ pandas>=2.2
 duckdb>=1.4
 requests>=2.31.0
 lxml>=5.0
+databricks-sdk>=0.40
