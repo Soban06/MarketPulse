@@ -12,6 +12,7 @@
 # MAGIC Creates:
 # MAGIC - `raw` schema + `landing` Volume: where `extract/upload.py` drops JSON batches
 # MAGIC - `bronze`, `silver`, `ops` schemas: tables are created by the pipeline steps that own them
+# MAGIC - `ops.pipeline_execution_logs`: the audit log every pipeline step writes to
 
 # COMMAND ----------
 
@@ -41,6 +42,13 @@ spark.sql(
     "COMMENT 'Raw JSON batches uploaded by extract/upload.py, one folder per batch_id'"
 )
 print(f"volume  {cfg.landing_volume_name}  ->  {cfg.landing_root}")
+
+# COMMAND ----------
+
+from marketpulse.audit import EXECUTION_LOG_TABLE, create_execution_log_table
+
+create_execution_log_table(spark, cfg)
+print(f"table   {cfg.ops(EXECUTION_LOG_TABLE)}")
 
 # COMMAND ----------
 
