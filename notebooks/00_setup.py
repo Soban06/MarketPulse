@@ -11,7 +11,8 @@
 # MAGIC
 # MAGIC Creates:
 # MAGIC - `raw` schema + `landing` Volume: where `extract/upload.py` drops JSON batches
-# MAGIC - `bronze`, `silver`, `ops` schemas: tables are created by the pipeline steps that own them
+# MAGIC - `bronze`, `silver`, `ops` schemas
+# MAGIC - every bronze and silver table defined in `marketpulse.schemas`, with column comments and keys
 # MAGIC - `ops.pipeline_execution_logs`: the audit log every pipeline step writes to
 
 # COMMAND ----------
@@ -49,6 +50,14 @@ from marketpulse.audit import EXECUTION_LOG_TABLE, create_execution_log_table
 
 create_execution_log_table(spark, cfg)
 print(f"table   {cfg.ops(EXECUTION_LOG_TABLE)}")
+
+# COMMAND ----------
+
+from marketpulse.schemas import ALL_TABLES, create_all_tables
+
+create_all_tables(spark, cfg)
+for spec in ALL_TABLES:
+    print(f"table   {spec.full_name(cfg)}")
 
 # COMMAND ----------
 
