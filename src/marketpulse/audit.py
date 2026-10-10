@@ -15,6 +15,10 @@ On entry the step is written as RUNNING. On exit the same row (keyed by log_id)
 becomes SUCCESS with its row counts, or FAILED with the error -- and the error
 is re-raised so the job still fails. A row stuck in RUNNING means the process
 died mid-step.
+
+The table doubles as the pipeline's memory: completed_batches(layer) tells each
+layer which batches it has already processed, so a standard run only picks up
+new ones while a backfill can re-process any batch on purpose.
 """
 
 import uuid
@@ -224,6 +228,81 @@ class AuditLogger:
             elif commit["operation"] in _WRITE_OPS:
                 totals["rows_inserted"] += metrics.get("numOutputRows", 0)
         return totals
+
+    # ------------------------------------------------------- state & one-offs
+
+    def completed_batches(self, layer: str) -> set[str]:
+        """Batches whose most recent run of `layer` finished with every step SUCCESS."""
+        rows = self.spark.sql(f"""
+            WITH latest AS (
+                SELECT batch_id, max_by(pipeline_run_id, start_time) AS run_id
+                FROM {self.table}
+                WHERE layer = :layer AND batch_id IS NOT NULL
+                GROUP BY batch_id
+            )
+            SELECT l.batch_id
+            FROM {self.table} l
+            JOIN latest ON l.batch_id = latest.batch_id AND l.pipeline_run_id = latest.run_id
+            WHERE l.layer = :layer
+            GROUP BY l.batch_id
+            HAVING count_if(l.status <> 'SUCCESS') = 0
+        """, args={"layer": layer}).collect()
+        return {r["batch_id"] for r in rows}
+
+    def pending_batches(self, layer: str, candidates: list[str]) -> list[str]:
+        """The candidates `layer` has not yet completed, oldest first (batch ids sort by time)."""
+        done = self.completed_batches(layer)
+        return sorted(b for b in candidates if b not in done)
+
+    def log_source_to_raw(self, manifest: dict, parameter: str):
+        """Record the laptop extraction step from its manifest.json, once per batch.
+
+        Extraction runs outside Databricks, so it can't write this table itself;
+        the manifest carries its real start/end times and row counts.
+        """
+        batch_id = manifest["run_id"]
+        if batch_id in self.completed_batches("source_to_raw"):
+            return
+        prices = manifest.get("prices", {})
+        failed = prices.get("failed") or []
+        log = StepLog(
+            log_id=str(uuid.uuid4()),
+            pipeline_run_id=self.pipeline_run_id,
+            layer="source_to_raw",
+            load_type=manifest["mode"],
+            batch_id=batch_id,
+            parameter=parameter,
+            target_table=self.cfg.landing_volume_name,
+            start_time=datetime.fromisoformat(manifest["started_at"]),
+            end_time=datetime.fromisoformat(manifest["finished_at"]),
+            executed_by="extract/ingest.py (local)",
+            status="SUCCESS",
+            rows_read=prices.get("rows"),
+            rows_inserted=prices.get("rows"),
+            rows_updated=0,
+            error_message=f"warning: no price data for {' '.join(failed)}" if failed else None,
+        )
+        self._write(log)
+
+    def log_skipped(self, layer: str, *, load_type: str, batch_id: str | None,
+                    parameter: str | None, target_table: str | None, reason: str):
+        """Record a step that was deliberately not run, e.g. after an earlier batch failed."""
+        self._validate(layer, load_type)
+        now = _now()
+        self._write(StepLog(
+            log_id=str(uuid.uuid4()),
+            pipeline_run_id=self.pipeline_run_id,
+            layer=layer,
+            load_type=load_type,
+            batch_id=batch_id,
+            parameter=parameter,
+            target_table=target_table,
+            start_time=now,
+            end_time=now,
+            executed_by=self.executed_by,
+            status="SKIPPED",
+            error_message=reason,
+        ))
 
     # ------------------------------------------------------------------ writes
 
