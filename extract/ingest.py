@@ -1,9 +1,11 @@
 """
-MarketPulse -- Bronze layer ingestion (Yahoo Finance via yfinance + Wikipedia).
+MarketPulse -- Source-to-Raw extraction (Yahoo Finance via yfinance + Wikipedia).
 
-Every run lands raw JSON in its own folder so runs can be replayed in order:
+Runs locally rather than in Databricks: Free Edition serverless compute cannot
+resolve external hosts like query2.finance.yahoo.com. Each run lands raw JSON in
+its own batch folder, which is then uploaded to the raw Volume for Spark:
 
-    data/bronze/<run_id>/                 run_id = <UTC stamp>_<mode>, e.g. 20261010T120000Z_full
+    data/landing/<run_id>/                run_id = <UTC stamp>_<mode>, e.g. 20261010T120000Z_full
         sp500_constituents.json           Wikipedia S&P 500 table (GICS sector/sub-industry, date added, CIK, ...)
         prices/<TICKER>.json              daily OHLC, Adj Close, Volume, Dividends, Stock Splits
         company_info/<TICKER>.json        yfinance Ticker.info (sector, industry, market cap, PE, ...)
@@ -13,14 +15,14 @@ Modes:
     full          historical baseline for every ticker (default --period 10y)
     incremental   daily run. Re-pulls the last few weeks (default --period 1mo) rather than
                   just the newest day, because Yahoo rewrites past Adj Close values after
-                  dividends and splits. load_silver.py MERGEs on (ticker, date) so those
-                  revisions reach the warehouse.
+                  dividends and splits. The silver layer MERGEs on (ticker, date) so those
+                  revisions reach the tables.
 
 Usage:
-    python ingest.py --mode full
-    python ingest.py --mode incremental
-    python ingest.py --mode incremental --tickers AAPL MSFT     # subset, handy for testing
-    python ingest.py --mode full --period max --skip-info
+    python extract/ingest.py --mode full
+    python extract/ingest.py --mode incremental
+    python extract/ingest.py --mode incremental --tickers AAPL MSFT     # subset, handy for testing
+    python extract/ingest.py --mode full --period max --skip-info
 
 Ticker universe defaults to the current S&P 500 (~503 symbols) scraped from Wikipedia.
 """
@@ -37,7 +39,7 @@ import pandas as pd
 import requests
 import yfinance as yf
 
-BRONZE_ROOT = Path("data/bronze")
+LANDING_ROOT = Path(__file__).resolve().parents[1] / "data" / "landing"
 WIKI_SP500_URL = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 HTTP_HEADERS = {"User-Agent": "MarketPulse/1.0 (university data analytics project)"}
 
@@ -76,7 +78,7 @@ def fetch_constituents(run_dir: Path) -> list[dict]:
         records = table.astype(object).where(table.notna(), None).to_dict(orient="records")
         print(f"    {len(records)} constituents from Wikipedia")
     except Exception as e:
-        previous = sorted(BRONZE_ROOT.glob("*/sp500_constituents.json"))
+        previous = sorted(LANDING_ROOT.glob("*/sp500_constituents.json"))
         if not previous:
             raise RuntimeError(f"Could not fetch S&P 500 list and no saved copy exists: {e}")
         with open(previous[-1], encoding="utf-8") as f:
@@ -202,7 +204,7 @@ def run(mode: str, period: str, tickers: list[str] | None, skip_info: bool,
         batch_size: int, workers: int):
     started = datetime.now(timezone.utc)
     run_id = f"{started.strftime('%Y%m%dT%H%M%SZ')}_{mode}"
-    run_dir = BRONZE_ROOT / run_id
+    run_dir = LANDING_ROOT / run_id
     run_dir.mkdir(parents=True, exist_ok=False)
     print(f"Run {run_id} -> {run_dir}")
 
@@ -244,7 +246,7 @@ def run(mode: str, period: str, tickers: list[str] | None, skip_info: bool,
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Land raw S&P 500 market data in the bronze layer")
+    parser = argparse.ArgumentParser(description="Land raw S&P 500 market data in data/landing")
     parser.add_argument(
         "--mode", choices=["full", "incremental"], required=True,
         help="full = historical baseline, incremental = re-pull the last few weeks",
