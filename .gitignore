@@ -4,7 +4,6 @@ __pycache__/
 .venv/
 venv/
 
-# Bronze runs are hundreds of MB -- keep only each run's manifest in git
-data/bronze/2*/*
-!data/bronze/2*/manifest.json
-data/warehouse/
+# Landing batches are hundreds of MB -- keep only each batch's manifest in git
+data/landing/*/*
+!data/landing/*/manifest.json
