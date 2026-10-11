@@ -420,7 +420,17 @@ One row per pipeline step (batch × source → target table) across every layer.
 
 ## Execution guide
 
-_To be completed: running a standard incremental load vs. a parameterized backfill._
+The pipeline has three steps. Each one takes parameters, so the same code runs the daily load and
+any backfill; nothing is hard-coded to "today".
+
+| Step | Runs on | Entry point | Parameters |
+|---|---|---|---|
+| Source → Raw | laptop | `extract/ingest.py`, then `extract/upload.py` | `--mode`, `--period`, `--tickers`; `--batch-id`, `--overwrite` |
+| Raw → Bronze | Databricks | `notebooks/01_raw_to_bronze` | `catalog`, `batch_ids`, `from_batch`, `to_batch`, `sources`, `pipeline_run_id` |
+| Bronze → Silver | Databricks | `notebooks/02_bronze_to_silver` | `catalog`, `batch_ids`, `from_batch`, `to_batch`, `start_date`, `end_date`, `pipeline_run_id` |
+
+Notebook parameters are widgets: input boxes at the top of the notebook once it has run once. They
+are also the parameter names to use when the notebooks run as Databricks Job tasks.
 
 ### One-time setup
 
@@ -428,8 +438,8 @@ _To be completed: running a standard incremental load vs. a parameterized backfi
 
 1. Create a Git folder from this repository (Workspace → your user folder → Create → Git folder).
 2. Open `notebooks/00_setup`, attach it to **Serverless** and run all. It creates the `raw`,
-   `bronze`, `silver` and `ops` schemas and the `raw.landing` Volume. The `catalog` widget
-   defaults to `workspace`.
+   `bronze`, `silver` and `ops` schemas, the `raw.landing` Volume, every bronze and silver table
+   and `ops.pipeline_execution_logs`. The `catalog` widget defaults to `workspace`. Safe to re-run.
 
 **Laptop** (extraction and upload)
 
@@ -442,16 +452,106 @@ databricks auth login --host https://<your-workspace>.cloud.databricks.com --pro
 `auth login` opens a browser to sign in and stores the `marketpulse` profile in
 `~/.databrickscfg`; `extract/upload.py` uses it by default.
 
-### Extract and upload a batch
+### Standard load (initial full load and daily incremental)
 
-```bash
-python extract/ingest.py --mode full          # 10-year baseline for all S&P 500 tickers
-python extract/ingest.py --mode incremental   # re-pull the last month (captures adj-close revisions)
-python extract/upload.py                      # send every new local batch to the raw Volume
+1. Extract a batch on the laptop and upload it:
+
+   ```bash
+   python extract/ingest.py --mode full          # first time: 10-year baseline for all S&P 500 tickers
+   python extract/ingest.py --mode incremental   # every day after: re-pull the last month
+   python extract/upload.py                      # send every new local batch to the raw Volume
+   ```
+
+2. In Databricks, run `01_raw_to_bronze` with **all batch parameters empty**.
+3. Then run `02_bronze_to_silver` with **all batch and date parameters empty**.
+
+With empty parameters each notebook processes only the batches it has not yet completed, oldest
+first, judged from `ops.pipeline_execution_logs`. A second run with nothing new prints
+"Nothing to load" / "Nothing to merge". In silver, new trading days are inserted, days whose values
+Yahoo revised (typically `adj_close` after a dividend) are updated and recorded in
+`silver.price_revision`, and unchanged days are left alone. Log entries are typed `full` or
+`incremental` from the batch's extraction mode.
+
+### Backfills
+
+Fill in the widgets **before** clicking Run all. Any batch or date parameter makes the run a
+backfill (`load_type = backfill` in the log) and processes exactly what was asked for, whether or
+not it was processed before.
+
+| Goal | Notebook | Widgets |
+|---|---|---|
+| Re-load one or more batches from raw into bronze | `01` | `batch_ids` = `20261010T133403Z_incremental` (comma-separate several) |
+| Re-load every batch in a time window | `01` | `from_batch` = `20261001T000000Z`, `to_batch` = `20261031T235959Z` |
+| Load a newly added source into batches already in bronze | `01` | `sources` = `constituents,company_info`, plus `batch_ids` or `from_batch`/`to_batch` |
+| Re-merge one or more batches into silver | `02` | `batch_ids` = `20261010T133403Z_incremental` |
+| Re-merge every batch in a time window | `02` | `from_batch` / `to_batch` as above |
+| Re-process a range of trading days from every batch (prices) | `02` | `start_date` = `2018-01-01`, `end_date` = `2018-12-31` |
+| Re-process a range of trading days from specific batches | `02` | `batch_ids` plus `start_date` / `end_date` |
+| Extract a longer history from the source | laptop | `python extract/ingest.py --mode full --period max` (yfinance periods: `1y`, `5y`, `10y`, `max`, ...), upload, then a standard run picks the new batch up |
+
+Batch ids are the folder names under `/Volumes/<catalog>/raw/landing/` (Catalog → workspace → raw →
+Volumes → landing), and sort by time because they start with their UTC timestamp. Batch ranges
+compare ids as text, so a bare timestamp such as `20261001T000000Z` works as a bound.
+
+What makes backfills safe to repeat:
+
+- **Raw → Bronze** writes each batch with `replaceWhere batch_id = …`: re-loading a batch replaces
+  its rows, it never appends a second copy.
+- **Bronze → Silver** `MERGE`s on the natural key and only updates rows whose values changed, so
+  re-merging unchanged data reports 0 inserted / 0 updated. Quarantine tables are rebuilt per batch.
+- A silver row is only updated by a batch at least as new as the one that last wrote it, so
+  backfilling an old batch fills gaps but never overwrites newer prices.
+- `start_date` / `end_date` apply to prices only; `dim_ticker` has no dates.
+
+Widget values are remembered between runs: **clear them after a backfill**, or the next "standard"
+run will be another backfill.
+
+### Running as a Databricks Job
+
+Jobs & Pipelines → Create job, with two notebook tasks on Serverless: `01_raw_to_bronze`, then
+`02_bronze_to_silver` depending on it. Give both tasks the parameter
+`pipeline_run_id` = `{{job.run_id}}` so one run's log entries share an id; leave the batch
+parameters empty for the daily run, or set them on "Run now with different parameters" for a backfill.
+
+### Checking a run
+
+Every step writes one row per batch × source → target table:
+
+```sql
+SELECT layer, load_type, batch_id, target_table, status,
+       rows_read, rows_inserted, rows_updated, rows_quarantined,
+       start_time, end_time, duration_seconds, error_message
+FROM workspace.ops.pipeline_execution_logs
+ORDER BY start_time DESC;
 ```
 
-`upload.py --batch-id <id>` re-sends one specific batch; add `--overwrite` to replace a batch
-that is already in the Volume.
+```sql
+-- rejected rows and why
+SELECT batch_id, reject_reason, count(*) FROM workspace.silver.quarantine_prices GROUP BY ALL;
 
+-- upstream price revisions applied by the MERGE
+SELECT * FROM workspace.silver.price_revision ORDER BY load_timestamp DESC;
+```
 
+### When something fails
 
+- **Raw → Bronze:** a failed batch is logged `FAILED` with its error, the remaining batches still
+  load, and the notebook fails at the end listing every failure. Fix the cause and run again with
+  empty parameters: batches whose latest run failed are picked up again.
+- **Bronze → Silver:** batches must apply in order, so the first failure stops the run and every
+  later batch is logged `SKIPPED`. Fix the cause and run again with empty parameters.
+- A row stuck at `RUNNING` in the log means the process died mid-step; the batch is retried on
+  the next run.
+- After pulling new code or switching the Git folder branch, notebooks pick up changed modules
+  automatically (`%autoreload`); if a module seems stale, restart Python
+  (`dbutils.library.restartPython()`).
+
+### Tests and demos
+
+All three run against throwaway schemas and drop them afterwards, so the real tables are never touched.
+
+| Notebook | Shows |
+|---|---|
+| `80_test_audit_logging` | SUCCESS / FAILED / SKIPPED logging, Delta row counts (incl. 0/0 on an identical MERGE), batch tracking |
+| `81_test_schemas` | every table created exactly as `schemas.py` defines it; real raw files read with the explicit schemas |
+| `91_demo_schema_drift` | a batch with a new field and `Volume = "abc"`: bronze rescues the field into `_rescued_data`, silver quarantines the bad row and merges the rest |
