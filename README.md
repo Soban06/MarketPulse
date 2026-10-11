@@ -509,10 +509,12 @@ SELECT * FROM workspace.silver.price_revision ORDER BY load_timestamp DESC;
 
 ### Tests and demos
 
-All three run against throwaway schemas and drop them afterwards, so the real tables are never touched.
+`80`, `81` and `91` run against throwaway schemas and drop them afterwards, so the real tables are never
+touched; `90` runs ordinary backfills on the real tables and proves they change nothing.
 
 | Notebook | Shows |
 |---|---|
 | `80_test_audit_logging` | SUCCESS / FAILED / SKIPPED logging, Delta row counts (incl. 0/0 on an identical MERGE), batch tracking |
 | `81_test_schemas` | every table created exactly as `schemas.py` defines it; real raw files read with the explicit schemas |
+| `90_demo_idempotency_and_backfill` | bronze and silver fingerprinted (counts, distinct keys, value hashes, latest `load_timestamp`), every batch re-MERGEd, an older period backfilled and a batch re-loaded into bronze, fingerprinted again: identical, 0 inserted / 0 updated, no duplicates |
 | `91_demo_schema_drift` | a batch with a new field and `Volume = "abc"`: bronze rescues the field into `_rescued_data`, silver quarantines the bad row and merges the rest |
