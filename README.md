@@ -9,6 +9,8 @@ with PySpark and Delta Lake.
 - **Scale:** ~503 tickers × 10 years ≈ 1.2M daily price rows (~367 MB raw JSON per full load,
   ~8 MB per daily incremental batch).
 
+**Proof that it works:** saved notebook runs with all outputs are in [`docs/run-evidence/`](docs/run-evidence/) (see [Proof that it works](#proof-that-it-works)).
+
 ## Architecture
 
 ```
@@ -518,3 +520,17 @@ touched; `90` runs ordinary backfills on the real tables and proves they change 
 | `81_test_schemas` | every table created exactly as `schemas.py` defines it; real raw files read with the explicit schemas |
 | `90_demo_idempotency_and_backfill` | bronze and silver fingerprinted (counts, distinct keys, value hashes, latest `load_timestamp`), every batch re-MERGEd, an older period backfilled and a batch re-loaded into bronze, fingerprinted again: identical, 0 inserted / 0 updated, no duplicates |
 | `91_demo_schema_drift` | a batch with a new field and `Volume = "abc"`: bronze rescues the field into `_rescued_data`, silver quarantines the bad row and merges the rest |
+
+## Proof that it works
+
+Each file in [`docs/run-evidence/`](docs/run-evidence/) is a Databricks HTML export of a real run in our
+workspace on the full dataset (503 tickers, 10 years), with every cell's output saved. To view one, download
+it from GitHub and open it in a browser.
+
+| Rubric item | Evidence | What to look for |
+|---|---|---|
+| Explicit schemas | [`81_test_schemas.html`](docs/run-evidence/81_test_schemas.html) | every bronze/silver table created exactly as its `StructType` in `schemas.py`; real raw files read with the explicit schemas, all values strings, no rescued data |
+| MERGE re-run creates no duplicates | [`90_demo_idempotency_and_backfill.html`](docs/run-evidence/90_demo_idempotency_and_backfill.html) | step 2: every batch re-MERGEd, all `0 inserted 0 updated`; step 5: before/after fingerprints identical (1,225,467 rows = 1,225,467 distinct keys, same value hashes, same `fact_last_written`) |
+| Backfill of an older period | [`90_demo_idempotency_and_backfill.html`](docs/run-evidence/90_demo_idempotency_and_backfill.html) | step 3: 2018-01-01 to 2018-12-31 re-processed from every batch; step 4: a batch re-loaded from raw into bronze, 11,060 rows before and after |
+| Schema change handled | [`91_demo_schema_drift.html`](docs/run-evidence/91_demo_schema_drift.html) | new `Exchange` field captured in bronze `_rescued_data`; `Volume = "abc"` quarantined as `unparseable volume` while the other rows merge |
+| Execution log table | [`90_demo_idempotency_and_backfill.html`](docs/run-evidence/90_demo_idempotency_and_backfill.html), [`80_test_audit_logging.html`](docs/run-evidence/80_test_audit_logging.html) | one row per step with layer, parameter, start/end time, status and rows inserted/updated; `80` also shows FAILED and SKIPPED entries |
