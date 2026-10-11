@@ -231,27 +231,33 @@ class AuditLogger:
 
     # ------------------------------------------------------- state & one-offs
 
-    def completed_batches(self, layer: str) -> set[str]:
-        """Batches whose most recent run of `layer` finished with every step SUCCESS."""
+    def completed_batches(self, layer: str, target_table: str | None = None) -> set[str]:
+        """Batches whose most recent run of `layer` finished with every step SUCCESS.
+
+        With `target_table`, only steps writing that table count -- so in a layer
+        with several targets, one table's success can't mark another's batch done.
+        """
+        target_filter = "AND target_table = :target" if target_table else ""
+        args = {"layer": layer, **({"target": target_table} if target_table else {})}
         rows = self.spark.sql(f"""
             WITH latest AS (
                 SELECT batch_id, max_by(pipeline_run_id, start_time) AS run_id
                 FROM {self.table}
-                WHERE layer = :layer AND batch_id IS NOT NULL
+                WHERE layer = :layer {target_filter} AND batch_id IS NOT NULL
                 GROUP BY batch_id
             )
             SELECT l.batch_id
             FROM {self.table} l
             JOIN latest ON l.batch_id = latest.batch_id AND l.pipeline_run_id = latest.run_id
-            WHERE l.layer = :layer
+            WHERE l.layer = :layer {target_filter}
             GROUP BY l.batch_id
             HAVING count_if(l.status <> 'SUCCESS') = 0
-        """, args={"layer": layer}).collect()
+        """, args=args).collect()
         return {r["batch_id"] for r in rows}
 
-    def pending_batches(self, layer: str, candidates: list[str]) -> list[str]:
+    def pending_batches(self, layer: str, candidates: list[str], target_table: str | None = None) -> list[str]:
         """The candidates `layer` has not yet completed, oldest first (batch ids sort by time)."""
-        done = self.completed_batches(layer)
+        done = self.completed_batches(layer, target_table)
         return sorted(b for b in candidates if b not in done)
 
     def log_source_to_raw(self, manifest: dict, parameter: str):
