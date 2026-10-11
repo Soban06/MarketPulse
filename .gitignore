@@ -4,6 +4,6 @@ __pycache__/
 .venv/
 venv/
 
-# Landing batches are hundreds of MB -- keep only each batch's manifest in git
-data/landing/*/*
-!data/landing/*/manifest.json
+# Landing batches are local to whoever extracted them (hundreds of MB); a tracked
+# manifest without its data would look like a complete batch to upload.py
+data/landing/

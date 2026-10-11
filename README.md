@@ -35,7 +35,7 @@ landing zone onwards runs in Spark.
 extract/            local Source -> Raw extraction and upload to the raw Volume
 src/marketpulse/    pipeline modules (schemas, audit logging, drift handling, layer logic)
 notebooks/          thin Databricks notebooks that read parameters and call src/marketpulse
-data/landing/       local raw batches (git-ignored except each batch's manifest.json)
+data/landing/       local raw batches (git-ignored; each member extracts their own)
 ```
 
 ## Raw landing batch format
