@@ -1,0 +1,41 @@
+[
+  {
+    "Ticker": "AAPL",
+    "Date": "2026-01-02",
+    "Open": 250.1,
+    "High": 252.3,
+    "Low": 249.0,
+    "Close": 251.7,
+    "Adj Close": 251.7,
+    "Volume": 41250000,
+    "Dividends": 0.0,
+    "Stock Splits": 0.0,
+    "Exchange": "NASDAQ"
+  },
+  {
+    "Ticker": "AAPL",
+    "Date": "2026-01-05",
+    "Open": 251.9,
+    "High": 254.0,
+    "Low": 250.4,
+    "Close": 253.2,
+    "Adj Close": 253.2,
+    "Volume": "abc",
+    "Dividends": 0.0,
+    "Stock Splits": 0.0,
+    "Exchange": "NASDAQ"
+  },
+  {
+    "Ticker": "AAPL",
+    "Date": "2026-01-06",
+    "Open": 253.0,
+    "High": 253.8,
+    "Low": 249.7,
+    "Close": 250.5,
+    "Adj Close": 250.5,
+    "Volume": 38900000,
+    "Dividends": 0.0,
+    "Stock Splits": 0.0,
+    "Exchange": "NASDAQ"
+  }
+]
