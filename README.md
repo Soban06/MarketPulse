@@ -66,7 +66,7 @@ the pipeline creates.
 - **Schema-on-read.** Every raw file is read with an explicit `StructType`; Spark schema inference is never used.
 - **Bronze values are strings.** A type change at the source (for example `Volume` arriving as `"1.2M"`) can never fail a bronze load. Values are converted with `try_cast` on the way to silver, and rows that fail land in a `quarantine_*` table with a `reject_reason`.
 - **Keys are enforced from silver onwards.** Bronze must accept whatever arrived, including malformed rows, so its keys describe the grain only.
-- **Lineage.** Every bronze row carries `batch_id`, `source_file` and `load_timestamp`. Every silver row carries `load_timestamp` and, except `dim_date`, the `batch_id` that last wrote it.
+- **Lineage.** Every bronze row carries `batch_id`, `source_file` and `load_timestamp`. Every silver row carries `load_timestamp` and the `batch_id` that last wrote it.
 - **Schema drift.** Bronze `prices` and `constituents` have a `_rescued_data` column that captures any field the schema does not know. `company_info` deliberately has none: Yahoo returns about 190 profile fields and MarketPulse keeps 18, so the ignored fields would fill it on every row and it would never signal real drift.
 
 ### Relationships
@@ -74,13 +74,11 @@ the pipeline creates.
 ```mermaid
 erDiagram
     dim_ticker ||--o{ fact_daily_price : "ticker"
-    dim_date ||--o{ fact_daily_price : "date"
-    dim_ticker ||--o{ fact_corporate_action : "ticker"
-    dim_date ||--o{ fact_corporate_action : "date"
     fact_daily_price ||--o{ price_revision : "ticker, date"
 ```
 
-- `fact_daily_price` and `fact_corporate_action` join to `dim_ticker` on `ticker` and to `dim_date` on `date`.
+- `fact_daily_price` joins to `dim_ticker` on `ticker`.
+- Dividends and stock splits are kept in `bronze.prices` (`dividends`, `stock_splits`); a dedicated silver table for them is planned for a later phase.
 - `price_revision` records every change the silver MERGE applied to a `fact_daily_price` row, keyed by the batch that caused it.
 - `quarantine_prices` and `quarantine_company_info` hold bronze rows rejected on the way to silver, with the bronze columns plus `reject_reason`.
 
@@ -238,21 +236,6 @@ One row per ticker per trading day, MERGEd so upstream revisions update in place
 | `batch_id` | `string` | yes | Landing batch this row came from, e.g. 20261010T132844Z_full |
 | `load_timestamp` | `timestamp` | yes | When this row was written to this table |
 
-#### `silver.fact_corporate_action`
-
-Dividends and stock splits, one row per ticker, date and action type
-
-**Primary key:** `ticker`, `date`, `action_type` (enforced: `NOT NULL` + `PRIMARY KEY` constraint)
-
-| Column | Type | Nullable | Description |
-|---|---|---|---|
-| `ticker` | `string` | no | Yahoo ticker symbol |
-| `date` | `date` | no | Ex-date of the dividend or effective date of the split |
-| `action_type` | `string` | no | dividend or split |
-| `value` | `double` | yes | Cash per share for a dividend, ratio for a split (4.0 = 4-for-1) |
-| `batch_id` | `string` | yes | Landing batch this row came from, e.g. 20261010T132844Z_full |
-| `load_timestamp` | `timestamp` | yes | When this row was written to this table |
-
 #### `silver.dim_ticker`
 
 One row per company: Wikipedia constituents joined with Yahoo company profiles
@@ -287,28 +270,6 @@ One row per company: Wikipedia constituents joined with Yahoo company profiles
 | `info_as_of` | `timestamp` | yes | When the Yahoo profile fields were fetched |
 | `is_sp500_member` | `boolean` | yes | In the most recently loaded S&P 500 constituents list |
 | `batch_id` | `string` | yes | Landing batch this row came from, e.g. 20261010T132844Z_full |
-| `load_timestamp` | `timestamp` | yes | When this row was written to this table |
-
-#### `silver.dim_date`
-
-Calendar dimension covering the full price history
-
-**Primary key:** `date_key` (enforced: `NOT NULL` + `PRIMARY KEY` constraint)
-
-| Column | Type | Nullable | Description |
-|---|---|---|---|
-| `date_key` | `int` | no | Date as yyyymmdd integer |
-| `date` | `date` | yes | Calendar date |
-| `year` | `int` | yes | Calendar year |
-| `quarter` | `int` | yes | Quarter 1-4 |
-| `month` | `int` | yes | Month 1-12 |
-| `month_name` | `string` | yes | Month name, e.g. January |
-| `iso_week` | `int` | yes | ISO week of year |
-| `day_of_week` | `int` | yes | ISO day of week, 1 = Monday |
-| `day_name` | `string` | yes | Day name, e.g. Monday |
-| `is_weekend` | `boolean` | yes | Saturday or Sunday |
-| `is_trading_day` | `boolean` | yes | At least one price exists for this date |
-| `is_month_end` | `boolean` | yes | Last calendar day of the month |
 | `load_timestamp` | `timestamp` | yes | When this row was written to this table |
 
 #### `silver.price_revision`
