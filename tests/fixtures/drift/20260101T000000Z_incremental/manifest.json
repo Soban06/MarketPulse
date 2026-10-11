@@ -1,0 +1,21 @@
+{
+  "run_id": "20260101T000000Z_incremental",
+  "mode": "incremental",
+  "period": "fixture",
+  "started_at": "2026-01-01T00:00:00+00:00",
+  "finished_at": "2026-01-01T00:00:01+00:00",
+  "tickers_requested": 1,
+  "prices": {
+    "tickers_saved": 1,
+    "rows": 3,
+    "failed": []
+  },
+  "company_info": {
+    "skipped": true,
+    "tickers_saved": 0,
+    "failed": []
+  },
+  "constituents": 0,
+  "size_bytes": 0,
+  "note": "Hand-made schema drift fixture for notebooks/91_demo_schema_drift -- not real market data. Every row has an unexpected Exchange field, and 2026-01-05 has Volume \"abc\"."
+}
