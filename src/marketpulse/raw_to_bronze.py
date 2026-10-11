@@ -30,8 +30,14 @@ from pyspark.sql.types import StructType
 
 from marketpulse.audit import AuditLogger
 from marketpulse.schemas import (
+    BRONZE_COMPANY_INFO,
+    BRONZE_CONSTITUENTS,
     BRONZE_PRICES,
+    COMPANY_INFO_COLUMN_MAP,
+    CONSTITUENTS_COLUMN_MAP,
     PRICES_COLUMN_MAP,
+    RAW_COMPANY_INFO,
+    RAW_CONSTITUENTS,
     RAW_PRICES,
     RESCUED_DATA_COLUMN,
     TableSpec,
@@ -59,6 +65,21 @@ SOURCES: dict[str, RawSource] = {
         raw_schema=RAW_PRICES,
         column_map=PRICES_COLUMN_MAP,
         table=BRONZE_PRICES,
+    ),
+    "constituents": RawSource(
+        name="constituents",
+        files="sp500_constituents.json",
+        raw_schema=RAW_CONSTITUENTS,
+        column_map=CONSTITUENTS_COLUMN_MAP,
+        table=BRONZE_CONSTITUENTS,
+    ),
+    "company_info": RawSource(
+        name="company_info",
+        files="company_info/*.json",
+        raw_schema=RAW_COMPANY_INFO,
+        column_map=COMPANY_INFO_COLUMN_MAP,
+        table=BRONZE_COMPANY_INFO,
+        rescued=False,  # Yahoo sends ~170 fields we ignore; rescuing them would hide real drift
     ),
 }
 
