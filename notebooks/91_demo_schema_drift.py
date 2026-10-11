@@ -38,7 +38,7 @@ sys.path.insert(0, os.path.abspath("../src"))
 
 from pyspark.sql import functions as F
 
-from marketpulse import raw_to_bronze
+from marketpulse import raw_to_bronze, silver_prices
 from marketpulse.config import PipelineConfig
 
 BATCH = "20260101T000000Z_incremental"
@@ -103,6 +103,43 @@ display(spark.sql(f"""
     FROM {cfg.bronze('prices')}
     GROUP BY batch_id
 """))
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### 3 · Bronze → Silver: the bad value is quarantined, the rest merge
+# MAGIC
+# MAGIC `try_cast(volume)` returns null for `"abc"`, so that row is rejected with a reason instead of
+# MAGIC failing the batch. The other two rows still have the unknown `Exchange` field, but every column
+# MAGIC silver needs is valid, so they merge; the extra field stays on record in bronze `_rescued_data`.
+
+# COMMAND ----------
+
+silver_prices.run(spark, cfg, batch_ids=[BATCH])
+
+fact = spark.table(cfg.silver("fact_daily_price"))
+quarantine = spark.table(cfg.silver("quarantine_prices"))
+display(fact.select("ticker", "date", "close", "volume", "batch_id", "load_timestamp").orderBy("date"))
+display(quarantine.select("ticker", "date", "volume", "reject_reason", "_rescued_data"))
+
+assert fact.count() == 2, f"expected the 2 valid rows in silver, got {fact.count()}"
+assert quarantine.count() == 1, f"expected 1 quarantined row, got {quarantine.count()}"
+assert quarantine.first()["reject_reason"] == "unparseable volume", quarantine.first()["reject_reason"]
+print("Silver: 2 rows merged, 1 row quarantined with reason 'unparseable volume'")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ### 4 · Every step of the drifted batch is in the audit log
+
+# COMMAND ----------
+
+display(
+    spark.table(cfg.ops("pipeline_execution_logs"))
+    .orderBy("start_time")
+    .select("layer", "load_type", "target_table", "status", "rows_read",
+            "rows_inserted", "rows_quarantined", "error_message")
+)
 
 # COMMAND ----------
 
