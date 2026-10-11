@@ -50,7 +50,42 @@ data/landing/<batch_id>/              batch_id = <UTC stamp>_<mode>, e.g. 202610
 
 ## Data models
 
-_To be completed: Bronze and Silver data dictionaries (columns, types, primary keys)._
+Every table lives in Unity Catalog as `<catalog>.<schema>.<table>`; the catalog is a pipeline
+parameter and defaults to `workspace`. The column-level tables below are generated from
+`src/marketpulse/schemas.py` by `scripts/generate_data_dictionary.py`, so they always match what
+the pipeline creates.
+
+### Layer conventions
+
+| Layer | Location | Holds | Types | Keys |
+|---|---|---|---|---|
+| Raw | `/Volumes/<catalog>/raw/landing/<batch_id>/` | JSON files exactly as extracted, one folder per batch | as in the source | none |
+| Bronze | `<catalog>.bronze.*` | One row per source record per batch | every source value is `STRING` | grain documented, not enforced |
+| Silver | `<catalog>.silver.*` | Cleaned, typed, deduplicated tables, MERGEd on natural keys | real types (`DATE`, `DOUBLE`, `BIGINT`, ...) | enforced: `NOT NULL` + `PRIMARY KEY` |
+
+- **Schema-on-read.** Every raw file is read with an explicit `StructType`; Spark schema inference is never used.
+- **Bronze values are strings.** A type change at the source (for example `Volume` arriving as `"1.2M"`) can never fail a bronze load. Values are converted with `try_cast` on the way to silver, and rows that fail land in a `quarantine_*` table with a `reject_reason`.
+- **Keys are enforced from silver onwards.** Bronze must accept whatever arrived, including malformed rows, so its keys describe the grain only.
+- **Lineage.** Every bronze row carries `batch_id`, `source_file` and `load_timestamp`. Every silver row carries `load_timestamp` and, except `dim_date`, the `batch_id` that last wrote it.
+- **Schema drift.** Bronze `prices` and `constituents` have a `_rescued_data` column that captures any field the schema does not know. `company_info` deliberately has none: Yahoo returns about 190 profile fields and MarketPulse keeps 18, so the ignored fields would fill it on every row and it would never signal real drift.
+
+### Relationships
+
+```mermaid
+erDiagram
+    dim_ticker ||--o{ fact_daily_price : "ticker"
+    dim_date ||--o{ fact_daily_price : "date"
+    dim_ticker ||--o{ fact_corporate_action : "ticker"
+    dim_date ||--o{ fact_corporate_action : "date"
+    fact_daily_price ||--o{ price_revision : "ticker, date"
+```
+
+- `fact_daily_price` and `fact_corporate_action` join to `dim_ticker` on `ticker` and to `dim_date` on `date`.
+- `price_revision` records every change the silver MERGE applied to a `fact_daily_price` row, keyed by the batch that caused it.
+- `quarantine_prices` and `quarantine_company_info` hold bronze rows rejected on the way to silver, with the bronze columns plus `reject_reason`.
+
+<!-- data-dictionary:start -->
+<!-- data-dictionary:end -->
 
 ## Execution guide
 
@@ -86,3 +121,6 @@ python extract/upload.py                      # send every new local batch to th
 
 `upload.py --batch-id <id>` re-sends one specific batch; add `--overwrite` to replace a batch
 that is already in the Volume.
+
+
+
