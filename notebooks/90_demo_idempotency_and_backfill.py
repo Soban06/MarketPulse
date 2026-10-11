@@ -52,9 +52,10 @@ def fingerprint():
     """Counts plus a hash of every value, so 'unchanged' means unchanged, not just the same row count."""
     fact, dim, bronze = cfg.silver("fact_daily_price"), cfg.silver("dim_ticker"), cfg.bronze("prices")
 
-    # Sum of per-row hashes; DECIMAL(38,0) because a BIGINT sum overflows under ANSI SQL.
+    # Sum of per-row hashes. DECIMAL(38,0) because a BIGINT sum overflows under ANSI SQL; returned
+    # as a string because converting a 38-digit decimal to Python fails (decimal.InvalidOperation).
     def value_hash(table):
-        return (f"(SELECT sum(CAST(xxhash64(struct(*)) AS DECIMAL(38,0))) "
+        return (f"(SELECT CAST(sum(CAST(xxhash64(struct(*)) AS DECIMAL(38,0))) AS STRING) "
                 f"FROM (SELECT * EXCEPT (load_timestamp) FROM {table}))")
 
     return spark.sql(f"""
