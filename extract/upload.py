@@ -36,6 +36,11 @@ def local_batches() -> list[str]:
     return sorted(p.parent.name for p in LANDING_ROOT.glob(f"*/{MANIFEST}"))
 
 
+def data_files(batch_id: str) -> list[Path]:
+    local_dir = LANDING_ROOT / batch_id
+    return sorted(p for p in local_dir.rglob("*") if p.is_file() and p.name != MANIFEST)
+
+
 def remote_exists(w: WorkspaceClient, path: str) -> bool:
     try:
         w.files.get_metadata(path)
@@ -52,7 +57,7 @@ def upload_file(w: WorkspaceClient, local: Path, remote: str):
 def upload_batch(w: WorkspaceClient, cfg: PipelineConfig, batch_id: str, workers: int) -> bool:
     local_dir = LANDING_ROOT / batch_id
     remote_dir = cfg.batch_path(batch_id)
-    files = sorted(p for p in local_dir.rglob("*") if p.is_file() and p.name != MANIFEST)
+    files = data_files(batch_id)
     total_bytes = sum(p.stat().st_size for p in files)
     print(f"  {batch_id}: {len(files)} files, {total_bytes / 1e6:.1f} MB -> {remote_dir}")
 
@@ -95,13 +100,6 @@ def main():
     args = parser.parse_args()
 
     cfg = PipelineConfig(catalog=args.catalog)
-    try:
-        w = WorkspaceClient(profile=args.profile)
-    except ValueError as e:
-        raise SystemExit(
-            f"Could not authenticate with profile '{args.profile}': {e}\n"
-            f"Run once: databricks auth login --host <workspace-url> --profile {args.profile}"
-        )
 
     available = local_batches()
     if args.batch_id:
@@ -111,6 +109,23 @@ def main():
         todo = args.batch_id
     else:
         todo = available
+
+    # A manifest with no data next to it (e.g. copied from elsewhere) must never be
+    # uploaded: in the Volume it would look like a complete, loadable batch.
+    empty = [b for b in todo if not data_files(b)]
+    if empty and args.batch_id:
+        raise SystemExit(f"Batch(es) have a manifest but no data files: {' '.join(empty)}")
+    for b in empty:
+        print(f"  {b}: manifest but no data files, skipping")
+    todo = [b for b in todo if b not in empty]
+
+    try:
+        w = WorkspaceClient(profile=args.profile)
+    except ValueError as e:
+        raise SystemExit(
+            f"Could not authenticate with profile '{args.profile}': {e}\n"
+            f"Run once: databricks auth login --host <workspace-url> --profile {args.profile}"
+        )
 
     if not args.overwrite:
         already = [b for b in todo if remote_exists(w, f"{cfg.batch_path(b)}/{MANIFEST}")]
