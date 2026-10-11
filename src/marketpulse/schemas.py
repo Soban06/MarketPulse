@@ -27,7 +27,6 @@ from pyspark.sql.types import (
     BooleanType,
     DateType,
     DoubleType,
-    IntegerType,
     LongType,
     StringType,
     StructField,
@@ -91,7 +90,6 @@ COMPANY_INFO_FIELDS = [
     ("website", "website", "Company website"),
     ("firstTradeDateMilliseconds", "first_trade_date_ms", "First trading day as epoch milliseconds"),
 ]
-
 
 
 def _raw_schema(fields) -> StructType:
@@ -179,7 +177,6 @@ BRONZE_COMPANY_INFO = TableSpec(
 )
 
 
-
 # ================================================================== silver
 
 SILVER_FACT_DAILY_PRICE = TableSpec(
@@ -199,21 +196,6 @@ SILVER_FACT_DAILY_PRICE = TableSpec(
     ]),
     key=("ticker", "date"),
     comment="One row per ticker per trading day, MERGEd so upstream revisions update in place",
-)
-
-SILVER_FACT_CORPORATE_ACTION = TableSpec(
-    layer="silver",
-    name="fact_corporate_action",
-    schema=StructType([
-        _field("ticker", StringType(), "Yahoo ticker symbol", nullable=False),
-        _field("date", DateType(), "Ex-date of the dividend or effective date of the split", nullable=False),
-        _field("action_type", StringType(), "dividend or split", nullable=False),
-        _field("value", DoubleType(), "Cash per share for a dividend, ratio for a split (4.0 = 4-for-1)"),
-        BATCH_ID,
-        LOAD_TIMESTAMP,
-    ]),
-    key=("ticker", "date", "action_type"),
-    comment="Dividends and stock splits, one row per ticker, date and action type",
 )
 
 SILVER_DIM_TICKER = TableSpec(
@@ -250,28 +232,6 @@ SILVER_DIM_TICKER = TableSpec(
     ]),
     key=("ticker",),
     comment="One row per company: Wikipedia constituents joined with Yahoo company profiles",
-)
-
-SILVER_DIM_DATE = TableSpec(
-    layer="silver",
-    name="dim_date",
-    schema=StructType([
-        _field("date_key", IntegerType(), "Date as yyyymmdd integer", nullable=False),
-        _field("date", DateType(), "Calendar date"),
-        _field("year", IntegerType(), "Calendar year"),
-        _field("quarter", IntegerType(), "Quarter 1-4"),
-        _field("month", IntegerType(), "Month 1-12"),
-        _field("month_name", StringType(), "Month name, e.g. January"),
-        _field("iso_week", IntegerType(), "ISO week of year"),
-        _field("day_of_week", IntegerType(), "ISO day of week, 1 = Monday"),
-        _field("day_name", StringType(), "Day name, e.g. Monday"),
-        _field("is_weekend", BooleanType(), "Saturday or Sunday"),
-        _field("is_trading_day", BooleanType(), "At least one price exists for this date"),
-        _field("is_month_end", BooleanType(), "Last calendar day of the month"),
-        LOAD_TIMESTAMP,  # rebuilt from the whole price history, so not tied to one batch
-    ]),
-    key=("date_key",),
-    comment="Calendar dimension covering the full price history",
 )
 
 SILVER_PRICE_REVISION = TableSpec(
@@ -318,9 +278,7 @@ SILVER_QUARANTINE_COMPANY_INFO = TableSpec(
 BRONZE_TABLES = (BRONZE_PRICES, BRONZE_CONSTITUENTS, BRONZE_COMPANY_INFO)
 SILVER_TABLES = (
     SILVER_FACT_DAILY_PRICE,
-    SILVER_FACT_CORPORATE_ACTION,
     SILVER_DIM_TICKER,
-    SILVER_DIM_DATE,
     SILVER_PRICE_REVISION,
     SILVER_QUARANTINE_PRICES,
     SILVER_QUARANTINE_COMPANY_INFO,
