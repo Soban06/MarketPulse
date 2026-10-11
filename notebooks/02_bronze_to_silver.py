@@ -29,6 +29,11 @@ dbutils.widgets.text("pipeline_run_id", "", "Pipeline run id")
 
 # COMMAND ----------
 
+# MAGIC %load_ext autoreload
+# MAGIC %autoreload 2
+
+# COMMAND ----------
+
 import os
 import sys
 
