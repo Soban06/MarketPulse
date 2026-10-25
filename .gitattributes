@@ -1,1 +1,5 @@
-*.pbix filter=lfs diff=lfs merge=lfs -text
+ # Preserve artifact bytes on Windows; these formats must never receive CRLF conversion.
+  *.pdf binary
+  *.pbix filter=lfs diff=lfs merge=lfs -text
+  *.png binary
+  *.jpg binary

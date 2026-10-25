@@ -1,0 +1,73 @@
+{
+  "workspace_run_id": "364924820876832",
+  "gold_test_run_passed": true,
+  "gold_row_counts": {
+    "daily_rows": 1230497,
+    "monthly_rows": 59004,
+    "aggregated_rows": 1230497
+  },
+  "typical_incremental_run": {
+    "run_id": "364924820876832",
+    "wall_seconds": 296.817286,
+    "summed_step_seconds": 224.01216200000005,
+    "billed_dbus": null,
+    "measured_cost_usd": 0.0,
+    "scope": "Measured incremental catch-up batch (11,063 input price rows; 5,030 new observations and 346 revisions) including the first Gold build. This is not a steady-state daily median."
+  },
+  "dag": {
+    "kind": "query_profile",
+    "image": "docs/report/images/gold-query-profile.png",
+    "instructor_accepted_query_profile": true,
+    "analysis": "Read from bottom to top: Spark scans Gold daily facts, computes partial ticker-month aggregates, shuffles those groups between tasks, and combines them in a later grouping aggregate. Columnar To Row converts the result format before a Limit and Result Query Stage return the notebook preview. The visible Shuffle confirms data redistribution during aggregation. The runtime graph complements the separately captured initial EXPLAIN plan.",
+    "summary_image": "docs/report/images/gold-performance-summary.png",
+    "operator_metrics_ms": {
+      "Scan Table": 328,
+      "Grouping Aggregate (lower)": 123,
+      "Shuffle": 38,
+      "Grouping Aggregate (upper)": 2,
+      "Columnar To Row": 1,
+      "Limit": 0,
+      "Result Query Stage": 0
+    },
+    "query_duration_ms": 1312,
+    "rows_read": 1230497,
+    "bytes_read_display": "21.20 MB",
+    "preview_rows": 1000,
+    "provenance": "Original user-supplied Query Profile graph and matching performance-summary screenshots; instructor acceptance confirmed by Soban.",
+    "acceptance_note": "Soban explicitly confirmed in chat that the instructor accepts Query Profile in place of Spark UI."
+  },
+  "power_bi": {
+    "pbix_path": "bi/MarketPulse.pbix",
+    "dashboard_image": null,
+    "model_image": null
+  },
+  "finops": {
+    "platform": "Databricks Free Edition",
+    "enterprise_region": "Azure East US - illustrative paid scenario",
+    "enterprise_cost_per_run_usd": 0.45,
+    "storage_monthly_usd": 5,
+    "bi_monthly_usd": 48,
+    "other_monthly_usd": 100,
+    "pricing_source": "https://prices.azure.com/api/retail/prices ; https://www.microsoft.com/en-us/power-platform/products/power-bi/pricing (checked 2026-10-25; details in docs/phase3/FINOPS.md)",
+    "assumptions": "Planning scenario, not measured Azure billing: assume 1 billed DBU per complete serverless job at the official East US Premium Automated Serverless Compute rate of USD 0.45/DBU. Allow USD 5/month storage, USD 48/month for two Power BI Premium Per User licenses (24/user/month paid yearly), and a USD 100/month budget for a short-lived serving warehouse, requests and transfer. These storage/serving amounts are budgets, not vendor quotes. Hourly 24/7 = 8,760 runs/year. No separate VM charge is added to serverless. Before procurement, benchmark paid DBUs and warehouse idle time; 0.5/1/2 DBU per run implies annual totals of USD 3,807 / 5,778 / 9,720 under the same monthly budgets. Taxes, growth and source licensing are excluded. Free Edition exposes no billed DBUs here, so wall time is not converted into fabricated usage."
+  },
+  "gold_test_job_run_id": "982463585840930",
+  "pipeline_job_url": "https://dbc-43683058-46b3.cloud.databricks.com/?o=7474657227153277#job/1088660592403482/run/364924820876832",
+  "diagnostics_job_url": "https://dbc-43683058-46b3.cloud.databricks.com/?o=7474657227153277#job/95255830185193/run/436619686310315",
+  "benchmark_before_seconds": [
+    1.105,
+    0.915,
+    0.941
+  ],
+  "benchmark_after_seconds": null,
+  "local_test_count": 38,
+  "steady_state_refresh": {
+    "wall_seconds": 122.714604,
+    "summed_step_seconds": 97.976209,
+    "gold_rows_inserted": 0,
+    "gold_rows_updated": 0,
+    "gold_rows_deleted": 0,
+    "new_batches": 0,
+    "run_id": "290709907986053"
+  }
+}
