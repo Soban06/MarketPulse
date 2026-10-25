@@ -15,8 +15,11 @@ with PySpark and Delta Lake.
 **1,230,497 daily fact rows and 59,004 monthly groups**. The isolated Gold suite
 passed on serverless, and 38 local checks passed. Real notebook outputs are saved
 in `docs/run-evidence/`. Saad's PBIX and the report screenshots are still pending.
-Start with [Soban and Saad's next steps](docs/phase3/START_HERE.md). The architecture
-PDF remains explicitly a draft until the remaining evidence is supplied.
+Start with [Soban and Saad's next steps](docs/phase3/START_HERE.md).
+The [architecture report](output/pdf/MarketPulse_Architecture_Report.pdf) is ready
+to submit for the completed engineering work and explicitly identifies Power BI
+as pending. Saad's dashboard deliverable remains outstanding; the report does not
+claim that all Phase 3 requirements have been fulfilled.
 
 ## Architecture
 

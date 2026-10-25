@@ -1,7 +1,8 @@
 # Architecture report
 
-The generated PDF is deliberately **DRAFT** until real workspace and Power BI
-evidence is supplied. The Phase 1/2 evidence in docs/run-evidence is historical;
+Default output is a **DRAFT** until all required evidence is supplied. The explicit
+`--submission` mode below publishes the completed engineering scope with BI pending.
+The Phase 1/2 evidence in docs/run-evidence is historical;
 it is not proof that the new Gold code ran successfully.
 
 ## Build
@@ -17,6 +18,16 @@ Draft output: `output/pdf/MarketPulse_Architecture_Report_DRAFT.pdf`.
 Final output: `output/pdf/MarketPulse_Architecture_Report.pdf`.
 The script is the editable source for the report. It generates architecture and
 star-schema diagrams directly as vectors and embeds actual screenshots when supplied.
+
+## Current submission version
+
+Soban requested a report submission before the delayed Power BI deliverable.
+Run `python scripts/build_report.py --submission` to create
+`output/pdf/MarketPulse_Architecture_Report.pdf` for the completed engineering scope.
+It requires all real engineering evidence, labels Power BI as pending on the cover
+and footers, and documents the outstanding BI work in Section 9. It does not pretend
+the overall Phase 3 submission is complete. `--final` still requires the actual
+PBIX and dashboard/model screenshots for a fully completed package.
 
 ## Evidence to enter
 

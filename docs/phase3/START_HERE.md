@@ -8,8 +8,9 @@ outputs are saved in docs/run-evidence. Power BI is Saad's part.
 **Your immediate remaining work:** give Saad [the connection details](../../bi/CONNECTION.md)
 and [his guide](POWER_BI_HANDOFF.md), then collect his PBIX and dashboard/model screenshots.
 Your [DAG screenshot](DAG_SCREENSHOT.md) has been added to the report and instructor acceptance is confirmed.
-The report is a DRAFT until the
-remaining real screenshots and PBIX are supplied. The steps below let you reproduce
+The architecture report is available for submission with Power BI explicitly pending.
+Its BI section can be completed when the remaining screenshots and PBIX arrive.
+The steps below let you reproduce
 the completed engineering work or run future batches; you do not need to redo Phase 1/2.
 
 ## Soban: first run
@@ -86,8 +87,11 @@ Refresh only after Soban confirms the entire pipeline run succeeded.
 
 - Repository: https://github.com/Soban06/MarketPulse (push the final reviewed changes).
 - Saad's `bi/MarketPulse.pbix`.
-- `output/pdf/MarketPulse_Architecture_Report.pdf`, generated with `--final`.
+- `output/pdf/MarketPulse_Architecture_Report.pdf`: current engineering submission
+  generated with `--submission`, explicitly marking BI pending. Regenerate with
+  `--final` after the remaining Power BI artifacts are supplied.
 - Keep actual notebook exports and screenshots in the repo as evidence.
 
 The present local checks do not certify that Gold has run in Databricks. Do not
-submit the DRAFT PDF as the completed Phase 3 report.
+submit the DRAFT PDF as the completed Phase 3 report. The current engineering PDF
+is a scoped submission and explicitly records the outstanding dashboard work.

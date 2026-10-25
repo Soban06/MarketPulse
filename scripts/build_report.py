@@ -1,6 +1,6 @@
-"""Build the Phase 3 architecture PDF. Missing real evidence keeps it a DRAFT.
+"""Build the Phase 3 architecture PDF with explicit submission scope.
 
-python scripts/build_report.py [--final] [--evidence path/to/evidence.json]
+python scripts/build_report.py [--final | --submission] [--evidence path/to/evidence.json]
 Requires reportlab; source text/diagrams are maintained in this file.
 """
 
@@ -74,9 +74,10 @@ def missing_evidence(e):
 
 
 class Diagram(Flowable):
-    def __init__(self, kind):
+    def __init__(self, kind, pending_bi=False):
         super().__init__()
         self.kind = kind
+        self.pending_bi = pending_bi
         self.width = WIDTH
         self.height = 235 if kind == "architecture" else 205
 
@@ -112,7 +113,9 @@ class Diagram(Flowable):
             arrow(425,163,425,134)
             box(176,68,w,66,"Gold star schema",["Date / Ticker dimensions", "Daily + monthly facts"])
             arrow(352,101,321,101)
-            box(0,68,w,66,"Power BI Desktop",["Direct warehouse connection", "Import model + visuals"])
+            box(0,68,w,66,"Power BI (pending)" if self.pending_bi else "Power BI Desktop",
+                ["Planned warehouse connection", "Import model + visuals pending"] if self.pending_bi
+                else ["Direct warehouse connection", "Import model + visuals"])
             arrow(176,101,145,101)
             c.setFillColor(MUTED); c.setFont("Helvetica",8)
             c.drawString(0,40,"All Spark layers share execution logging; Gold validation gates BI refresh.")
@@ -128,7 +131,7 @@ class Diagram(Flowable):
             arrow(292,145,175,82)
 
 
-def build(e, final=False):
+def build(e, final=False, submission=False):
     styles = getSampleStyleSheet()
     styles.add(ParagraphStyle(name="MPTitle", fontName="Helvetica-Bold", fontSize=32,
                               leading=37, textColor=NAVY, spaceAfter=14))
@@ -184,11 +187,17 @@ def build(e, final=False):
     add("MARKETPULSE","MPTitle")
     add("Lakehouse Architecture &amp; Business Intelligence","MPHeading")
     add("DS-3001 / Data Analysis and Visualization / Phase 3","MPSub")
-    status="FINAL EVIDENCE PACKAGE" if final else "DRAFT - FINAL EVIDENCE PENDING"
+    status=("ENGINEERING REPORT / POWER BI DELIVERABLE PENDING" if submission
+            else "FINAL EVIDENCE PACKAGE" if final else "DRAFT - FINAL EVIDENCE PENDING")
     table(["Document status"],[[status]])
     add("<b>Engineering and report:</b> Soban (24L-2545)<br/>"
         "<b>Power BI:</b> Saad Jahangir (24L-2516)<br/>"
         "<b>Earlier phases:</b> completed jointly by Soban and Saad.")
+    if submission:
+        add("<b>Submission scope:</b> this report documents the completed architecture and "
+            "validated data-engineering implementation. The Power BI dashboard file and its "
+            "screenshots are outstanding and are explicitly identified in Section 9. This "
+            "report does not claim completion of every Phase 3 deliverable.")
     sub("Purpose")
     add("MarketPulse converts daily market prices into a reusable analytical model. "
         "The pipeline retains raw inputs, validates and reconciles typed records, and computes "
@@ -207,7 +216,7 @@ def build(e, final=False):
     add('Repository: <link href="https://github.com/Soban06/MarketPulse" color="#087F8C">github.com/Soban06/MarketPulse</link>',"MPSmall")
 
     page(2,"End-to-end architecture")
-    story.append(Diagram("architecture"))
+    story.append(Diagram("architecture",pending_bi=submission))
     sub("Execution boundary")
     add("Source extraction runs on the laptop because the implemented Free Edition workspace "
         "restricted outbound access to the source hosts. The uploader writes manifest.json last. "
@@ -398,20 +407,45 @@ def build(e, final=False):
         "terminate idle warehouses; reuse materialized stages; tune Import refresh frequency; "
         "consider affected-ticker recalculation only if measured full-history cost warrants it.","MPSmall")
 
-    page(9,"Power BI and submission readiness")
+    page(9,"Power BI delivery status" if submission else "Power BI and submission readiness")
     bi=e.get("power_bi",{})
-    figure(bi.get('dashboard_image'),"Saad's dashboard screenshot pending: price + MA7/30, relative volatility, volume versus absolute return, and pipeline/error visuals.",185)
-    figure(bi.get('model_image'),"Saad's Model-view screenshot pending: one-to-many single-direction relationships from Date and Ticker to facts.",150)
-    add("Power BI Desktop connects directly to the Databricks SQL warehouse using Import "
+    if submission:
+        add("<b>The Power BI deliverable is pending.</b> No PBIX, dashboard screenshot or actual "
+            "Power BI Model-view screenshot was available for this submission. The Gold tables, "
+            "warehouse connection details, measures and implementation guide are prepared. "
+            "An existing Databricks star schema does not by itself prove a configured Power BI model.")
+        table(["Component","Delivery status"],[
+            ["Gold facts and dimensions","Implemented, populated and validated in Databricks."],
+            ["BI source connection","Server hostname and warehouse HTTP path documented; Desktop connection not verified."],
+            ["Power BI semantic model","One-to-many relationship specification provided; actual model pending."],
+            ["Dashboard visuals / interactions","Three proposal questions mapped to measures and visuals; actual report pending."],
+            ["PBIX and screenshots","Outstanding; assigned to Saad."],
+        ],[165,WIDTH-165])
+        sub("Dashboard specification supplied for implementation")
+        table(["Business question","Specified visual"],[
+            ["Price trend","Closing-price line with precomputed 7/30-observation moving-average overlays."],
+            ["Relative risk","Ticker comparison using the latest available 30-return rolling volatility."],
+            ["Volume versus movement","One point per ticker-date: raw/relative volume versus absolute adjusted return."],
+            ["Pipeline health","Execution status and duration, actual quarantine reasons and revision counts."],
+        ],[145,WIDTH-145])
+        add("The remaining file and screenshots may be appended after completion, subject to "
+            "the TA's submission arrangements. No dashboard images, interactive behavior or "
+            "Power BI relationship settings have been fabricated.")
+    else:
+        figure(bi.get('dashboard_image'),"Saad's dashboard screenshot pending: price + MA7/30, relative volatility, volume versus absolute return, and pipeline/error visuals.",185)
+        figure(bi.get('model_image'),"Saad's Model-view screenshot pending: one-to-many single-direction relationships from Date and Ticker to facts.",150)
+    add(("The specified Power BI design uses a direct Databricks SQL warehouse connection in Import "
+         if submission else "Power BI Desktop connects directly to the Databricks SQL warehouse using Import ") +
         "mode. A single-ticker price chart avoids summing company prices. Risk comparisons "
         "use each ticker's latest available 30-return volatility within the selected dates; "
         "tooltips expose stale observation dates. Scatter points retain ticker-date grain.")
-    add("Operations show execution status, duration, actual quarantine reasons and revision "
+    add(("The planned operations page uses execution status, duration, actual quarantine reasons and revision "
+         if submission else "Operations show execution status, duration, actual quarantine reasons and revision ") +
         "counts. Summing rejected-row counters across multiple logged steps would double-count "
         "rejects; the quarantine view supplies those totals instead.")
-    add("Final deliverables are the updated GitHub repository, Saad's .pbix and this report "
-        "with real evidence. The checked-in handoff guide lists the exact connections, measures "
-        "and screenshots. Draft status is removed only after finalization checks pass.","MPSmall")
+    add("The full Phase 3 submission consists of the updated GitHub repository, a Power BI "
+        "deliverable and the architecture PDF. The checked-in handoff guide lists the exact "
+        "connections, measures and remaining screenshots.","MPSmall")
 
     page(10,"References and evidence register")
     references=[
@@ -438,13 +472,13 @@ def build(e, final=False):
     ],[145,WIDTH-145])
     missing=missing_evidence(e)
     if missing:
-        sub("Still required before final submission")
+        sub("Outstanding Phase 3 BI artifacts" if submission else "Still required before final submission")
         add(escape("; ".join(missing)) + ".","MPSmall")
     else:
         add("All automated evidence-presence checks passed. Review the real screenshots, "
             "assumptions and deliverables before submission.","MPSmall")
 
-    out=ROOT / "output/pdf" / ("MarketPulse_Architecture_Report.pdf" if final else "MarketPulse_Architecture_Report_DRAFT.pdf")
+    out=ROOT / "output/pdf" / ("MarketPulse_Architecture_Report.pdf" if final or submission else "MarketPulse_Architecture_Report_DRAFT.pdf")
     out.parent.mkdir(parents=True,exist_ok=True)
     doc=SimpleDocTemplate(str(out),pagesize=A4,rightMargin=48,leftMargin=48,
                           topMargin=48,bottomMargin=48,title="MarketPulse Architecture and BI Report",
@@ -452,7 +486,7 @@ def build(e, final=False):
     def footer(canvas, doc):
         canvas.saveState(); canvas.setStrokeColor(TEAL); canvas.setLineWidth(1)
         canvas.line(48,38,A4[0]-48,38); canvas.setFont("Helvetica",8); canvas.setFillColor(MUTED)
-        canvas.drawString(48,25,"MARKETPULSE / PHASE 3" + (" / DRAFT" if not final else ""))
+        canvas.drawString(48,25,"MARKETPULSE / PHASE 3" + (" / BI PENDING" if submission else " / DRAFT" if not final else ""))
         canvas.drawRightString(A4[0]-48,25,f"{doc.page}"); canvas.restoreState()
     doc.build(story,onFirstPage=footer,onLaterPages=footer)
     return out
@@ -460,15 +494,22 @@ def build(e, final=False):
 
 def main():
     parser=argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--final',action='store_true')
+    mode=parser.add_mutually_exclusive_group()
+    mode.add_argument('--final',action='store_true',help='Require every Phase 3 artifact, including the PBIX and screenshots')
+    mode.add_argument('--submission',action='store_true',help='Submit completed engineering report with Power BI explicitly pending')
     parser.add_argument('--evidence',type=Path,default=ROOT/'docs/report/evidence.json')
     args=parser.parse_args()
     evidence=json.loads(args.evidence.read_text(encoding='utf-8'))
     missing=missing_evidence(evidence)
     if args.final and missing:
         parser.error("Final report blocked by missing real evidence:\n- " + "\n- ".join(missing))
-    print(build(evidence,final=args.final))
-    if missing:
+    engineering_missing=[m for m in missing if m not in ('Power BI file','dashboard screenshot','Power BI model screenshot')]
+    if args.submission and engineering_missing:
+        parser.error("Engineering evidence is incomplete:\n- " + "\n- ".join(engineering_missing))
+    print(build(evidence,final=args.final,submission=args.submission))
+    if args.submission:
+        print('Submission report created. Power BI artifacts remain explicitly pending; this is not a complete BI submission.')
+    elif missing:
         print(f"DRAFT: {len(missing)} evidence requirements still need real workspace/BI results.")
 
 
