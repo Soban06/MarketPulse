@@ -333,7 +333,9 @@ def build(e, final=False):
                     'is the largest displayed operator. This query has no WHERE predicate, '
                     'so predicate pushdown is not claimed.','MPBody'),
                   p('Submission note','MPSub'),
-                  p('This is an actual Databricks Query Profile, not Spark UI. Instructor '
+                  p('The instructor accepts this Databricks Query Profile as the Free Edition '
+                    'alternative to Spark UI, as confirmed by Soban.' if dag.get('instructor_accepted_query_profile')
+                    else 'This is an actual Databricks Query Profile, not Spark UI. Instructor '
                     'acceptance of this Free Edition substitute remains unconfirmed.','MPSmall')]
         if e.get('benchmark_before_seconds'):
             notes.append(p('Separate repeated analytical reads: '+escape(str(e['benchmark_before_seconds']))+

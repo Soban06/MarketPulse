@@ -8,7 +8,7 @@ Scan Table (328 ms), two Grouping Aggregate stages (123 ms and 2 ms), Shuffle
 The summary shows 1,230,497 rows and 21.20 MB read, with 1.312 seconds query duration.
 The Limit is a 1,000-row notebook preview, not the full monthly fact cardinality.
 
-**Still needed:** instructor acceptance of Query Profile in place of Spark UI.
+**Accepted:** Soban confirmed that the instructor accepts Query Profile in place of Spark UI.
 The steps below reproduce the already captured evidence if another image is needed.
 
 1. Open the [completed evidence job](https://dbc-43683058-46b3.cloud.databricks.com/jobs/95255830185193/runs/436619686310315?o=7474657227153277).
@@ -17,8 +17,7 @@ The steps below reproduce the already captured evidence if another image is need
    **Query Profile**, select the monthly aggregation query, then show the graph.
 4. Capture a readable screenshot. Save it as `docs/report/images/gold-query-profile.png`.
 5. Set `dag.image` in docs/report/evidence.json to that repository-relative path.
-6. Confirm with the instructor that Query Profile is accepted for Free Edition,
-   then set `dag.instructor_accepted_query_profile=true` only when actually accepted.
+6. Instructor acceptance is already recorded as `dag.instructor_accepted_query_profile=true`.
 
 The captured initial physical plan includes:
 

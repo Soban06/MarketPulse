@@ -91,7 +91,7 @@ summary, saved under docs/report/images. The graph shows a 328 ms table scan,
 
 ## Remaining submission evidence
 
-- Instructor acceptance of the supplied Query Profile screenshot on Free Edition.
+- Instructor acceptance of the supplied Query Profile screenshot is confirmed by Soban.
 - Saad's real PBIX, dashboard screenshot and relationship-model screenshot.
 - Rebuild the final PDF after those inputs are present; the builder rejects a
   final-labelled output while required evidence is missing.
