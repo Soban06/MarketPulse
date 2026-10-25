@@ -84,11 +84,14 @@ The 90-day analytical read took **1.105, 0.915 and 0.941 seconds** over repeated
 runs; caching can affect these results. OPTIMIZE was not requested, so no before/after
 speedup is claimed. The monthly query ran, and EXPLAIN shows column pruning,
 partial/final grouping and a Photon shuffle. This is an initial planned execution
-graph, not a substitute for the actual Query Profile screenshot still required.
+graph. Soban subsequently supplied the actual runtime graph and matching performance
+summary, saved under docs/report/images. The graph shows a 328 ms table scan,
+123 ms partial grouping, 38 ms shuffle, 2 ms later grouping, and the notebook's
+1,000-row preview limit. The supplied summary reports 1.312 seconds and 21.20 MB read.
 
 ## Remaining submission evidence
 
-- Runtime graph screenshot and instructor acceptance of Query Profile on Free Edition.
+- Instructor acceptance of the supplied Query Profile screenshot on Free Edition.
 - Saad's real PBIX, dashboard screenshot and relationship-model screenshot.
 - Rebuild the final PDF after those inputs are present; the builder rejects a
   final-labelled output while required evidence is missing.

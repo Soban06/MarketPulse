@@ -308,28 +308,51 @@ def build(e, final=False):
 
     page(7,"Executed DAG and performance evidence")
     dag=e.get("dag",{})
-    figure(dag.get("image"),"DAG screenshot pending: run the monthly Gold aggregation in notebook 93 and capture its real Query Profile (or accepted Spark UI evidence).",300)
-    if dag.get("analysis"):
-        add(escape(dag['analysis']))
+    graph=resolved(dag.get('image'))
+    if graph and graph.is_file():
+        # A tall query-profile screenshot becomes illegible when squeezed into
+        # a short full-width figure. Keep its original proportions in a full-height
+        # column and put the explanation alongside it.
+        w,h=ImageReader(str(graph)).getSize()
+        left_width=240
+        scale=min((left_width-10)/w,650/h)
+        image=Image(str(graph),width=w*scale,height=h*scale,hAlign='LEFT')
+        metrics=dag.get('operator_metrics_ms',{})
+        timings='<br/>'.join(escape(f"{name}: {value} ms") for name,value in metrics.items())
+        notes=[p('Executed graph','MPSub'),p(escape(dag.get('analysis','')),'MPBody')]
+        if timings:
+            notes += [p('Displayed operator timings','MPSub'),p(timings,'MPBody')]
+        notes += [p('Rows and preview limit','MPSub'),
+                  p('The graph scans about 1.23 million rows. Its Limit operator returns a '
+                    '1,000-row notebook preview. Intermediate row labels describe this '
+                    'limited execution; they do not replace the independently validated '
+                    '59,004-row monthly fact count.','MPBody'),
+                  p('Timing interpretation','MPSub'),
+                  p('The matching performance summary shows 1.312 seconds and 21.20 MB read. '
+                    'Operator timings are not added to infer end-to-end duration. Scan Table '
+                    'is the largest displayed operator. This query has no WHERE predicate, '
+                    'so predicate pushdown is not claimed.','MPBody'),
+                  p('Submission note','MPSub'),
+                  p('This is an actual Databricks Query Profile, not Spark UI. Instructor '
+                    'acceptance of this Free Edition substitute remains unconfirmed.','MPSmall')]
+        if e.get('benchmark_before_seconds'):
+            notes.append(p('Separate repeated analytical reads: '+escape(str(e['benchmark_before_seconds']))+
+                           ' seconds; caching may affect results. OPTIMIZE was not run and no '
+                           'post-optimization speedup is claimed.','MPSmall'))
+        layout=Table([[image,notes]],colWidths=[left_width,WIDTH-left_width],hAlign='LEFT')
+        layout.setStyle(TableStyle([('VALIGN',(0,0),(-1,-1),'TOP'),
+                                   ('LEFTPADDING',(0,0),(-1,-1),0),
+                                   ('RIGHTPADDING',(0,0),(0,0),10),
+                                   ('RIGHTPADDING',(1,0),(1,0),0),
+                                   ('TOPPADDING',(0,0),(-1,-1),0),
+                                   ('BOTTOMPADDING',(0,0),(-1,-1),0)]))
+        story.append(layout)
     else:
-        add("Execution analysis is pending. The monthly aggregation is expected to scan Gold "
-            "daily columns and aggregate by ticker/month. An exchange may redistribute groups. "
-            "These expectations must be replaced with the operators, timings and row/byte "
-            "statistics from the executed graph. Do not claim predicate pushdown, broadcast joins "
-            "or eliminated shuffles without observing them.")
-    sub("Free Edition constraint")
-    add("Databricks serverless does not expose Spark UI. Query Profile is its supported "
-        "diagnostic surface. Submitting that instead of a literal Spark UI screenshot requires "
-        "instructor acceptance; otherwise the workload must run on suitable classic compute.")
-    sub("Optimization experiment")
-    add("Notebook 93 records three analytical-query elapsed times before optional Liquid "
-        "Clustering/OPTIMIZE and three afterward, alongside table details. Repeated runs may "
-        "benefit from caches. Record actual scans and operators; this small dataset may show "
-        "little speed improvement. Avoid unnecessary optimization on every daily run.")
-    if e.get('benchmark_before_seconds'):
-        add("Observed read-query elapsed times: " + escape(str(e['benchmark_before_seconds'])) +
-            " seconds. These repeated measurements may include cache effects; no post-OPTIMIZE "
-            "speedup is claimed.","MPSmall")
+        figure(None,'DAG screenshot pending: capture the actual runtime Query Profile graph.',300)
+        if dag.get('analysis'):
+            add(escape(dag['analysis']))
+        add('Free Edition uses Query Profile; instructor acceptance as a Spark UI substitute '
+            'is required. Execution analysis must use actual operators and metrics.')
 
     page(8,"FinOps evaluation")
     run=e.get("typical_incremental_run",{}); fin=e.get("finops",{})

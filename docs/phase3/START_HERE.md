@@ -6,8 +6,9 @@ Gold now has 1,230,497 daily rows and 59,004 monthly groups. Exports with actual
 outputs are saved in docs/run-evidence. Power BI is Saad's part.
 
 **Your immediate remaining work:** give Saad [the connection details](../../bi/CONNECTION.md)
-and [his guide](POWER_BI_HANDOFF.md), capture [the DAG screenshot](DAG_SCREENSHOT.md),
-and obtain the instructor's screenshot decision. The report is a DRAFT until the
+and [his guide](POWER_BI_HANDOFF.md), and obtain the instructor's screenshot decision.
+Your [DAG screenshot](DAG_SCREENSHOT.md) has been received and added to the report.
+The report is a DRAFT until the
 remaining real screenshots and PBIX are supplied. The steps below let you reproduce
 the completed engineering work or run future batches; you do not need to redo Phase 1/2.
 

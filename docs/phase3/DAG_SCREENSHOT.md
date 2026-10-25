@@ -1,8 +1,15 @@
-# One screenshot still needed for the report
+# Captured DAG screenshot and reproduction steps
 
-Browser automation could not safely verify the browser address on this computer,
-so it was stopped. The evidence notebook itself ran successfully through the API.
-Its HTML export and physical plan are saved under docs/run-evidence.
+Soban supplied the actual Query Profile graph and matching performance summary.
+Both original screenshots are saved in docs/report/images and the graph is embedded
+in the report with an operator-by-operator explanation. The runtime graph shows
+Scan Table (328 ms), two Grouping Aggregate stages (123 ms and 2 ms), Shuffle
+(38 ms), Columnar To Row (1 ms), Limit and Result Query Stage (0 ms each).
+The summary shows 1,230,497 rows and 21.20 MB read, with 1.312 seconds query duration.
+The Limit is a 1,000-row notebook preview, not the full monthly fact cardinality.
+
+**Still needed:** instructor acceptance of Query Profile in place of Spark UI.
+The steps below reproduce the already captured evidence if another image is needed.
 
 1. Open the [completed evidence job](https://dbc-43683058-46b3.cloud.databricks.com/jobs/95255830185193/runs/436619686310315?o=7474657227153277).
 2. Open the **evidence** task and its notebook output.
@@ -25,6 +32,6 @@ The captured initial physical plan includes:
 
 The executed query produced the monthly result. Explain actual profile operators
 and scan/shuffle statistics visible in the screenshot; do not invent bytes or time.
-The report already distinguishes the captured EXPLAIN plan from the missing
-runtime graph screenshot. If the instructor requires literal Spark UI, obtain a
+The report distinguishes the initial EXPLAIN plan from the supplied runtime
+graph screenshot. If the instructor requires literal Spark UI, obtain a
 classic-compute environment rather than relabelling Query Profile as Spark UI.
