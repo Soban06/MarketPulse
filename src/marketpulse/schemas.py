@@ -117,15 +117,18 @@ COMPANY_INFO_COLUMN_MAP = _column_map(COMPANY_INFO_FIELDS)
 
 @dataclass(frozen=True)
 class TableSpec:
-    layer: str                       # "bronze" | "silver"
+    layer: str                       # "bronze" | "silver" | "gold"
     name: str                        # table name inside the layer's schema
     schema: StructType
     key: tuple[str, ...]             # natural key / grain of the table
     comment: str
-    enforce_key: bool = True         # declare key as NOT NULL + PRIMARY KEY constraint
+    enforce_key: bool = True         # NOT NULL is enforced; PRIMARY KEY is informational
+    foreign_keys: tuple = ()         # (column, dimension table, referenced column), within this layer
 
     def full_name(self, cfg) -> str:
-        return cfg.bronze(self.name) if self.layer == "bronze" else cfg.silver(self.name)
+        if self.layer not in ("bronze", "silver", "gold"):
+            raise ValueError(f"Unsupported table layer: {self.layer}")
+        return getattr(cfg, self.layer)(self.name)
 
 
 BATCH_ID = _field("batch_id", StringType(), "Landing batch this row came from, e.g. 20261010T132844Z_full")
@@ -145,7 +148,7 @@ def _bronze_schema(fields, rescued: bool) -> StructType:
 
 # ================================================================== bronze
 # Bronze accepts whatever arrived, including malformed rows, so keys are documented
-# as the grain but not enforced; enforcement happens in silver.
+# as the grain only. Silver/Gold use NOT NULL, deduplication and explicit key checks.
 
 BRONZE_PRICES = TableSpec(
     layer="bronze",
@@ -283,7 +286,87 @@ SILVER_TABLES = (
     SILVER_QUARANTINE_PRICES,
     SILVER_QUARANTINE_COMPANY_INFO,
 )
-ALL_TABLES = BRONZE_TABLES + SILVER_TABLES
+GOLD_DIM_DATE = TableSpec(
+    layer="gold", name="dim_date", key=("date_key",),
+    comment="Contiguous calendar dates covering market observations and operational events",
+    schema=StructType([
+        _field("date_key", LongType(), "Calendar key YYYYMMDD", nullable=False),
+        _field("calendar_date", DateType(), "Calendar date; unique", nullable=False),
+        _field("year", LongType(), "Calendar year"),
+        _field("quarter", LongType(), "Calendar quarter 1 to 4"),
+        _field("month", LongType(), "Calendar month 1 to 12"),
+        _field("month_name", StringType(), "English month name"),
+        _field("year_month", StringType(), "Sortable year and month YYYY-MM"),
+        _field("day_of_month", LongType(), "Day of month"),
+        _field("day_of_week", LongType(), "ISO weekday: Monday 1 through Sunday 7"),
+        _field("is_weekend", BooleanType(), "Saturday or Sunday; not an exchange holiday calendar"),
+        _field("is_observed_trading_day", BooleanType(), "At least one Silver price observation on this date"),
+    ]),
+)
+
+GOLD_DIM_TICKER = TableSpec(
+    layer="gold", name="dim_ticker", key=("ticker_key",),
+    comment="Type 1 company descriptions; stable surrogate key and latest classification",
+    schema=StructType([
+        _field("ticker_key", LongType(), "Stable numeric surrogate key; assigned once", nullable=False),
+        _field("ticker", StringType(), "Yahoo ticker symbol; unique", nullable=False),
+        _field("company_name", StringType(), "Latest company name; ticker fallback"),
+        _field("sector", StringType(), "Latest GICS sector, Yahoo fallback, else Unknown"),
+        _field("industry", StringType(), "Latest GICS sub-industry, Yahoo fallback, else Unknown"),
+        _field("exchange", StringType(), "Latest listing exchange or Unknown"),
+        _field("currency", StringType(), "Latest trading currency or Unknown"),
+        _field("country", StringType(), "Latest headquarters country or Unknown"),
+        _field("is_sp500_member", BooleanType(), "Membership in latest available constituent snapshot"),
+        _field("info_as_of", TimestampType(), "Fetch time of latest available company profile"),
+        LOAD_TIMESTAMP,
+    ]),
+)
+
+GOLD_FACT_DAILY_MARKET = TableSpec(
+    layer="gold", name="fact_daily_market", key=("ticker_key", "date_key"),
+    comment="One ticker per trading observation, with precomputed returns, moving averages and risk",
+    foreign_keys=(("ticker_key", "dim_ticker", "ticker_key"), ("date_key", "dim_date", "date_key")),
+    schema=StructType([
+        _field("ticker_key", LongType(), "Foreign key to gold.dim_ticker", nullable=False),
+        _field("date_key", LongType(), "Foreign key to gold.dim_date", nullable=False),
+        _field("trade_date", DateType(), "Trading observation date; redundant date for filtering/clustering", nullable=False),
+        *[_field(c, DoubleType(), f"Silver {c} price") for c in ("open", "high", "low", "close", "adj_close")],
+        _field("volume", LongType(), "Shares traded on this date; additive across observations"),
+        _field("daily_return", DoubleType(), "Adjusted close / previous observation adjusted close - 1; decimal fraction"),
+        _field("abs_daily_return", DoubleType(), "Absolute adjusted daily return; decimal fraction"),
+        _field("ma_7", DoubleType(), "Mean close over 7 observations including current; null until 7 valid closes"),
+        _field("ma_30", DoubleType(), "Mean close over 30 observations including current; null until 30 valid closes"),
+        _field("volatility_30", DoubleType(), "Sample standard deviation of last 30 valid daily returns; not annualized"),
+        _field("annualized_volatility_30", DoubleType(), "volatility_30 multiplied by sqrt(252); convention, not a forecast"),
+        _field("avg_volume_prior_30", DoubleType(), "Mean volume in 30 preceding observations; current excluded; full valid window required"),
+        _field("relative_volume", DoubleType(), "Current volume / avg_volume_prior_30; null for incomplete or zero baseline"),
+        BATCH_ID, LOAD_TIMESTAMP,
+    ]),
+)
+
+GOLD_FACT_MONTHLY_MARKET = TableSpec(
+    layer="gold", name="fact_monthly_market", key=("ticker_key", "date_key"),
+    comment="Ticker-month analytical summary; correlation is per month and is not additive",
+    foreign_keys=(("ticker_key", "dim_ticker", "ticker_key"), ("date_key", "dim_date", "date_key")),
+    schema=StructType([
+        _field("ticker_key", LongType(), "Foreign key to gold.dim_ticker", nullable=False),
+        _field("date_key", LongType(), "Foreign key to month-start date in gold.dim_date", nullable=False),
+        _field("month_start", DateType(), "First calendar day of observation month", nullable=False),
+        _field("observation_count", LongType(), "Number of daily price observations aggregated"),
+        _field("total_volume", LongType(), "Sum of known non-negative daily volume; null if all missing"),
+        _field("avg_abs_daily_return", DoubleType(), "Mean of known absolute daily returns"),
+        _field("volume_return_correlation", DoubleType(), "Pearson correlation of volume and absolute daily return within month"),
+        _field("relative_volume_return_correlation", DoubleType(), "Pearson correlation of relative volume and absolute daily return within month"),
+        _field("volume_return_pairs", LongType(), "Number of valid volume/return pairs in correlation"),
+        _field("relative_volume_return_pairs", LongType(), "Number of valid relative-volume/return pairs"),
+        _field("first_observation", DateType(), "First observed date in this ticker-month"),
+        _field("last_observation", DateType(), "Last observed date in this ticker-month; no claim of complete calendar coverage"),
+        LOAD_TIMESTAMP,
+    ]),
+)
+
+GOLD_TABLES = (GOLD_DIM_DATE, GOLD_DIM_TICKER, GOLD_FACT_DAILY_MARKET, GOLD_FACT_MONTHLY_MARKET)
+ALL_TABLES = BRONZE_TABLES + SILVER_TABLES + GOLD_TABLES
 
 
 # =================================================================== DDL
@@ -293,7 +376,7 @@ def _sql_string(text: str) -> str:
 
 
 def create_table_ddl(spec: TableSpec, cfg) -> str:
-    """CREATE TABLE IF NOT EXISTS statement with column comments and, for enforced keys, a PK."""
+    """DDL with enforced NOT NULL and informational primary/foreign keys."""
     key_columns = set(spec.key) if spec.enforce_key else set()
     columns = [
         f"{f.name} {f.dataType.simpleString()}"
@@ -303,6 +386,11 @@ def create_table_ddl(spec: TableSpec, cfg) -> str:
     ]
     if spec.enforce_key:
         columns.append(f"CONSTRAINT {spec.layer}_{spec.name}_pk PRIMARY KEY ({', '.join(spec.key)})")
+    for column, dimension, referenced in spec.foreign_keys:
+        columns.append(
+            f"CONSTRAINT {spec.layer}_{spec.name}_{column}_fk FOREIGN KEY ({column}) "
+            f"REFERENCES {getattr(cfg, spec.layer)(dimension)} ({referenced})"
+        )
     body = ",\n    ".join(columns)
     return (
         f"CREATE TABLE IF NOT EXISTS {spec.full_name(cfg)} (\n    {body}\n)\n"

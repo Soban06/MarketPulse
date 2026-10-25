@@ -11,6 +11,13 @@ with PySpark and Delta Lake.
 
 **Proof that it works:** saved notebook runs with all outputs are in [`docs/run-evidence/`](docs/run-evidence/) (see [Proof that it works](#proof-that-it-works)).
 
+**Phase 3:** Gold is built and validated in Databricks: the saved run contains
+**1,230,497 daily fact rows and 59,004 monthly groups**. The isolated Gold suite
+passed on serverless, and 38 local checks passed. Real notebook outputs are saved
+in `docs/run-evidence/`. Saad's PBIX and the report screenshots are still pending.
+Start with [Soban and Saad's next steps](docs/phase3/START_HERE.md). The architecture
+PDF remains explicitly a draft until the remaining evidence is supplied.
+
 ## Architecture
 
 ```
@@ -23,6 +30,12 @@ with PySpark and Delta Lake.
                                                         │  02_bronze_to_silver
                                                         ▼
                                                  workspace.silver.*   typed, MERGEd on natural keys
+                                                        │  03_silver_to_gold (included in 04_run_pipeline)
+                                                        ▼
+                                                 workspace.gold.*     Date/Ticker star, precomputed windows + monthly facts
+                                                        │  SQL warehouse, Import mode
+                                                        ▼
+                                                 Power BI Desktop     Saad's dashboard
                                                  workspace.ops.pipeline_execution_logs
 ```
 
@@ -63,11 +76,12 @@ the pipeline creates.
 |---|---|---|---|---|
 | Raw | `/Volumes/<catalog>/raw/landing/<batch_id>/` | JSON files exactly as extracted, one folder per batch | as in the source | none |
 | Bronze | `<catalog>.bronze.*` | One row per source record per batch | every source value is `STRING` | grain documented, not enforced |
-| Silver | `<catalog>.silver.*` | Cleaned, typed, deduplicated tables, MERGEd on natural keys | real types (`DATE`, `DOUBLE`, `BIGINT`, ...) | enforced: `NOT NULL` + `PRIMARY KEY` |
+| Silver | `<catalog>.silver.*` | Cleaned, typed, deduplicated tables, MERGEd on natural keys | real types (`DATE`, `DOUBLE`, `BIGINT`, ...) | enforced `NOT NULL`; informational primary keys |
+| Gold | `<catalog>.gold.*` | Dimensional facts, descriptive dimensions and BI views | explicit types and business measures | informational PK/FK; explicit uniqueness/orphan checks |
 
 - **Schema-on-read.** Every raw file is read with an explicit `StructType`; Spark schema inference is never used.
 - **Bronze values are strings.** A type change at the source (for example `Volume` arriving as `"1.2M"`) can never fail a bronze load. Values are converted with `try_cast` on the way to silver, and rows that fail land in a `quarantine_*` table with a `reject_reason`.
-- **Keys are enforced from silver onwards.** Bronze must accept whatever arrived, including malformed rows, so its keys describe the grain only.
+- **Key integrity.** `NOT NULL` is enforced; Databricks primary/foreign keys are informational. Silver deduplicates before MERGE; Gold validates uniqueness and references explicitly. Bronze keys describe grain only.
 - **Lineage.** Every bronze row carries `batch_id`, `source_file` and `load_timestamp`. Every silver row carries `load_timestamp` and the `batch_id` that last wrote it.
 - **Schema drift.** Bronze `prices` and `constituents` have a `_rescued_data` column that captures any field the schema does not know. `company_info` deliberately has none: Yahoo returns about 190 profile fields and MarketPulse keeps 18, so the ignored fields would fill it on every row and it would never signal real drift.
 
@@ -83,6 +97,12 @@ erDiagram
 - Dividends and stock splits are kept in `bronze.prices` (`dividends`, `stock_splits`); a dedicated silver table for them is planned for a later phase.
 - `price_revision` records every change the silver MERGE applied to a `fact_daily_price` row, keyed by the batch that caused it.
 - `quarantine_prices` and `quarantine_company_info` hold bronze rows rejected on the way to silver, with the bronze columns plus `reject_reason`.
+
+For the Gold ER diagram, key relationships and exact metric rules see
+[Gold model](docs/phase3/GOLD_MODEL.md). Both Gold facts join to `gold.dim_ticker`
+and `gold.dim_date`; the monthly fact uses a month-start date key. Saad's
+[Power BI guide](docs/phase3/POWER_BI_HANDOFF.md) maps the three original proposal
+questions to visuals, relationships and measures.
 
 <!-- data-dictionary:start -->
 
@@ -223,7 +243,7 @@ Raw yfinance company profiles per batch (selected fields), all values as strings
 
 One row per ticker per trading day, MERGEd so upstream revisions update in place
 
-**Primary key:** `ticker`, `date` (enforced: `NOT NULL` + `PRIMARY KEY` constraint)
+**Primary key:** `ticker`, `date` (`NOT NULL` enforced; primary key informational; uniqueness checked by pipeline)
 
 | Column | Type | Nullable | Description |
 |---|---|---|---|
@@ -242,7 +262,7 @@ One row per ticker per trading day, MERGEd so upstream revisions update in place
 
 One row per company: Wikipedia constituents joined with Yahoo company profiles
 
-**Primary key:** `ticker` (enforced: `NOT NULL` + `PRIMARY KEY` constraint)
+**Primary key:** `ticker` (`NOT NULL` enforced; primary key informational; uniqueness checked by pipeline)
 
 | Column | Type | Nullable | Description |
 |---|---|---|---|
@@ -278,7 +298,7 @@ One row per company: Wikipedia constituents joined with Yahoo company profiles
 
 Audit of every upstream price change caught by the fact_daily_price MERGE
 
-**Primary key:** `ticker`, `date`, `batch_id` (enforced: `NOT NULL` + `PRIMARY KEY` constraint)
+**Primary key:** `ticker`, `date`, `batch_id` (`NOT NULL` enforced; primary key informational; uniqueness checked by pipeline)
 
 | Column | Type | Nullable | Description |
 |---|---|---|---|
@@ -350,19 +370,117 @@ Bronze company profile rows rejected on the way to silver, with the reason
 | `load_timestamp` | `timestamp` | yes | When this row was written to this table |
 | `reject_reason` | `string` | yes | Why the row failed validation or casting |
 
+### Gold tables
+
+#### `gold.dim_date`
+
+Contiguous calendar dates covering market observations and operational events
+
+**Primary key:** `date_key` (`NOT NULL` enforced; primary key informational; uniqueness checked by pipeline)
+
+| Column | Type | Nullable | Description |
+|---|---|---|---|
+| `date_key` | `bigint` | no | Calendar key YYYYMMDD |
+| `calendar_date` | `date` | no | Calendar date; unique |
+| `year` | `bigint` | yes | Calendar year |
+| `quarter` | `bigint` | yes | Calendar quarter 1 to 4 |
+| `month` | `bigint` | yes | Calendar month 1 to 12 |
+| `month_name` | `string` | yes | English month name |
+| `year_month` | `string` | yes | Sortable year and month YYYY-MM |
+| `day_of_month` | `bigint` | yes | Day of month |
+| `day_of_week` | `bigint` | yes | ISO weekday: Monday 1 through Sunday 7 |
+| `is_weekend` | `boolean` | yes | Saturday or Sunday; not an exchange holiday calendar |
+| `is_observed_trading_day` | `boolean` | yes | At least one Silver price observation on this date |
+
+#### `gold.dim_ticker`
+
+Type 1 company descriptions; stable surrogate key and latest classification
+
+**Primary key:** `ticker_key` (`NOT NULL` enforced; primary key informational; uniqueness checked by pipeline)
+
+| Column | Type | Nullable | Description |
+|---|---|---|---|
+| `ticker_key` | `bigint` | no | Stable numeric surrogate key; assigned once |
+| `ticker` | `string` | no | Yahoo ticker symbol; unique |
+| `company_name` | `string` | yes | Latest company name; ticker fallback |
+| `sector` | `string` | yes | Latest GICS sector, Yahoo fallback, else Unknown |
+| `industry` | `string` | yes | Latest GICS sub-industry, Yahoo fallback, else Unknown |
+| `exchange` | `string` | yes | Latest listing exchange or Unknown |
+| `currency` | `string` | yes | Latest trading currency or Unknown |
+| `country` | `string` | yes | Latest headquarters country or Unknown |
+| `is_sp500_member` | `boolean` | yes | Membership in latest available constituent snapshot |
+| `info_as_of` | `timestamp` | yes | Fetch time of latest available company profile |
+| `load_timestamp` | `timestamp` | yes | When this row was written to this table |
+
+#### `gold.fact_daily_market`
+
+One ticker per trading observation, with precomputed returns, moving averages and risk
+
+**Primary key:** `ticker_key`, `date_key` (`NOT NULL` enforced; primary key informational; uniqueness checked by pipeline)
+
+**Foreign key:** `ticker_key` -> `gold.dim_ticker.ticker_key`
+**Foreign key:** `date_key` -> `gold.dim_date.date_key`
+
+| Column | Type | Nullable | Description |
+|---|---|---|---|
+| `ticker_key` | `bigint` | no | Foreign key to gold.dim_ticker |
+| `date_key` | `bigint` | no | Foreign key to gold.dim_date |
+| `trade_date` | `date` | no | Trading observation date; redundant date for filtering/clustering |
+| `open` | `double` | yes | Silver open price |
+| `high` | `double` | yes | Silver high price |
+| `low` | `double` | yes | Silver low price |
+| `close` | `double` | yes | Silver close price |
+| `adj_close` | `double` | yes | Silver adj_close price |
+| `volume` | `bigint` | yes | Shares traded on this date; additive across observations |
+| `daily_return` | `double` | yes | Adjusted close / previous observation adjusted close - 1; decimal fraction |
+| `abs_daily_return` | `double` | yes | Absolute adjusted daily return; decimal fraction |
+| `ma_7` | `double` | yes | Mean close over 7 observations including current; null until 7 valid closes |
+| `ma_30` | `double` | yes | Mean close over 30 observations including current; null until 30 valid closes |
+| `volatility_30` | `double` | yes | Sample standard deviation of last 30 valid daily returns; not annualized |
+| `annualized_volatility_30` | `double` | yes | volatility_30 multiplied by sqrt(252); convention, not a forecast |
+| `avg_volume_prior_30` | `double` | yes | Mean volume in 30 preceding observations; current excluded; full valid window required |
+| `relative_volume` | `double` | yes | Current volume / avg_volume_prior_30; null for incomplete or zero baseline |
+| `batch_id` | `string` | yes | Landing batch this row came from, e.g. 20261010T132844Z_full |
+| `load_timestamp` | `timestamp` | yes | When this row was written to this table |
+
+#### `gold.fact_monthly_market`
+
+Ticker-month analytical summary; correlation is per month and is not additive
+
+**Primary key:** `ticker_key`, `date_key` (`NOT NULL` enforced; primary key informational; uniqueness checked by pipeline)
+
+**Foreign key:** `ticker_key` -> `gold.dim_ticker.ticker_key`
+**Foreign key:** `date_key` -> `gold.dim_date.date_key`
+
+| Column | Type | Nullable | Description |
+|---|---|---|---|
+| `ticker_key` | `bigint` | no | Foreign key to gold.dim_ticker |
+| `date_key` | `bigint` | no | Foreign key to month-start date in gold.dim_date |
+| `month_start` | `date` | no | First calendar day of observation month |
+| `observation_count` | `bigint` | yes | Number of daily price observations aggregated |
+| `total_volume` | `bigint` | yes | Sum of known non-negative daily volume; null if all missing |
+| `avg_abs_daily_return` | `double` | yes | Mean of known absolute daily returns |
+| `volume_return_correlation` | `double` | yes | Pearson correlation of volume and absolute daily return within month |
+| `relative_volume_return_correlation` | `double` | yes | Pearson correlation of relative volume and absolute daily return within month |
+| `volume_return_pairs` | `bigint` | yes | Number of valid volume/return pairs in correlation |
+| `relative_volume_return_pairs` | `bigint` | yes | Number of valid relative-volume/return pairs |
+| `first_observation` | `date` | yes | First observed date in this ticker-month |
+| `last_observation` | `date` | yes | Last observed date in this ticker-month; no claim of complete calendar coverage |
+| `load_timestamp` | `timestamp` | yes | When this row was written to this table |
+
 ### Operational tables
 
 #### `ops.pipeline_execution_logs`
 
 One row per pipeline step (batch × source → target table) across every layer.
 
-**Primary key:** `log_id` (enforced)
+**Primary key:** `log_id` (`NOT NULL` enforced; primary key informational)
 
 | Column | Type | Nullable | Description |
 |---|---|---|---|
 | `log_id` | `string` | no | Unique id of this log entry (primary key) |
 | `pipeline_run_id` | `string` | yes | Groups every entry written by one notebook or job run |
-| `layer` | `string` | yes | source_to_raw \| raw_to_bronze \| bronze_to_silver |
+| `layer` | `string` | yes | source_to_raw \| raw_to_bronze \| bronze_to_silver \| silver_to_gold |
 | `load_type` | `string` | yes | full \| incremental \| backfill |
 | `batch_id` | `string` | yes | Landing batch processed, e.g. 20261010T132844Z_full |
 | `parameter` | `string` | yes | Exact input processed: a Volume path or the backfill parameters |
@@ -375,6 +493,8 @@ One row per pipeline step (batch × source → target table) across every layer.
 | `rows_inserted` | `bigint` | yes | Rows inserted into the target |
 | `rows_updated` | `bigint` | yes | Existing target rows updated |
 | `rows_quarantined` | `bigint` | yes | Rows rejected to a quarantine table |
+| `rows_aggregated` | `bigint` | yes | Output groups computed by an aggregate step; null for non-aggregate steps |
+| `rows_deleted` | `bigint` | yes | Rows deleted from target by a snapshot reconciliation |
 | `error_message` | `string` | yes | Exception (FAILED) or warning text |
 | `executed_by` | `string` | yes | Databricks identity that ran the step |
 | `load_timestamp` | `timestamp` | yes | When this log row was last written |
@@ -383,7 +503,7 @@ One row per pipeline step (batch × source → target table) across every layer.
 
 ## Execution guide
 
-The pipeline has three steps. Each one takes parameters, so the same code runs the daily load and
+The pipeline has four layer transitions. Each one takes parameters, so the same code runs the daily load and
 any backfill; nothing is hard-coded to "today".
 
 | Step | Runs on | Entry point | Parameters |
@@ -391,6 +511,8 @@ any backfill; nothing is hard-coded to "today".
 | Source → Raw | laptop | `extract/ingest.py`, then `extract/upload.py` | `--mode`, `--period`, `--tickers`; `--batch-id`, `--overwrite` |
 | Raw → Bronze | Databricks | `notebooks/01_raw_to_bronze` | `catalog`, `batch_ids`, `from_batch`, `to_batch`, `sources`, `pipeline_run_id` |
 | Bronze → Silver | Databricks | `notebooks/02_bronze_to_silver` | `catalog`, `batch_ids`, `from_batch`, `to_batch`, `start_date`, `end_date`, `pipeline_run_id` |
+| Silver → Gold | Databricks | `notebooks/03_silver_to_gold` | `catalog`, `pipeline_run_id`, `load_type` |
+| All Spark layers | Databricks | `notebooks/04_run_pipeline` | `catalog`, `pipeline_run_id`, batch/date backfill parameters |
 
 Notebook parameters are widgets: input boxes at the top of the notebook once it has run once. They
 are also the parameter names to use when the notebooks run as Databricks Job tasks.
@@ -401,7 +523,7 @@ are also the parameter names to use when the notebooks run as Databricks Job tas
 
 1. Create a Git folder from this repository (Workspace → your user folder → Create → Git folder).
 2. Open `notebooks/00_setup`, attach it to **Serverless** and run all. It creates the `raw`,
-   `bronze`, `silver` and `ops` schemas, the `raw.landing` Volume, every bronze and silver table
+   `bronze`, `silver`, `gold` and `ops` schemas, the `raw.landing` Volume, every bronze, silver and Gold table
    and `ops.pipeline_execution_logs`. The `catalog` widget defaults to `workspace`. Safe to re-run.
 
 **Laptop** (extraction and upload)
@@ -425,12 +547,14 @@ databricks auth login --host https://<your-workspace>.cloud.databricks.com --pro
    python extract/upload.py                      # send every new local batch to the raw Volume
    ```
 
-2. In Databricks, run `01_raw_to_bronze` with **all batch parameters empty**.
-3. Then run `02_bronze_to_silver` with **all batch and date parameters empty**.
+2. In Databricks, run `04_run_pipeline` with **all batch and date parameters empty**.
+   It runs Bronze, Silver and Gold in sequence. If Phase 2 is already loaded and you
+   only need the first Gold build, run `03_silver_to_gold` directly.
 
 With empty parameters each notebook processes only the batches it has not yet completed, oldest
 first, judged from `ops.pipeline_execution_logs`. A second run with nothing new prints
-"Nothing to load" / "Nothing to merge". In silver, new trading days are inserted, days whose values
+"Nothing to load" / "Nothing to merge" for Bronze/Silver. Gold recalculates complete
+history and conditionally MERGEs, repairing any earlier incomplete Gold run. In silver, new trading days are inserted, days whose values
 Yahoo revised (typically `adj_close` after a dividend) are updated and recorded in
 `silver.price_revision`, and unchanged days are left alone. Log entries are typed `full` or
 `incremental` from the batch's extraction mode.
@@ -471,18 +595,23 @@ run will be another backfill.
 
 ### Running as a Databricks Job
 
-Jobs & Pipelines → Create job, with two notebook tasks on Serverless: `01_raw_to_bronze`, then
-`02_bronze_to_silver` depending on it. Give both tasks the parameter
-`pipeline_run_id` = `{{job.run_id}}` so one run's log entries share an id; leave the batch
-parameters empty for the daily run, or set them on "Run now with different parameters" for a backfill.
+Deploy the checked-in `databricks.yml` with `databricks bundle deploy --profile marketpulse`,
+then run `databricks bundle run marketpulse_pipeline --profile marketpulse`. It creates
+serverless setup and pipeline tasks with a shared run id, retry settings and one concurrent run.
+For the isolated Gold integration suite run `databricks bundle run marketpulse_gold_tests --profile marketpulse`.
+See [Phase 3 run instructions](docs/phase3/START_HERE.md) for the local extraction/upload/job runner.
+The older separate 01/02 notebooks remain available for targeted Phase 2 maintenance;
+run 03 after those complete to refresh Gold, or use 04 for the complete chain.
 
 ### Checking a run
 
-Every step writes one row per batch × source → target table:
+Each work step writes an audit row. Bronze/Silver use batch × source/target;
+Gold combines pinned Silver snapshots from many batches, so its batch_id is null
+and its parameters identify the source Delta versions:
 
 ```sql
 SELECT layer, load_type, batch_id, target_table, status,
-       rows_read, rows_inserted, rows_updated, rows_quarantined,
+       rows_read, rows_inserted, rows_updated, rows_deleted, rows_quarantined, rows_aggregated,
        start_time, end_time, duration_seconds, error_message
 FROM workspace.ops.pipeline_execution_logs
 ORDER BY start_time DESC;
@@ -520,6 +649,13 @@ touched; `90` runs ordinary backfills on the real tables and proves they change 
 | `81_test_schemas` | every table created exactly as `schemas.py` defines it; real raw files read with the explicit schemas |
 | `90_demo_idempotency_and_backfill` | bronze and silver fingerprinted (counts, distinct keys, value hashes, latest `load_timestamp`), every batch re-MERGEd, an older period backfilled and a batch re-loaded into bronze, fingerprinted again: identical, 0 inserted / 0 updated, no duplicates |
 | `91_demo_schema_drift` | a batch with a new field and `Volume = "abc"`: bronze rescues the field into `_rescued_data`, silver quarantines the bad row and merges the rest |
+| `82_test_gold` | isolated Delta integration: full rolling windows, stable surrogate keys, unchanged rerun, corrections, deletion reconciliation, audit migration and recovery |
+| `93_phase3_evidence` | real monthly aggregation and EXPLAIN, three timed read queries, run timings and optional clustering/OPTIMIZE |
+
+Local checks: `pip install -r requirements-dev.txt`, then
+`python -m unittest discover -s tests -v`. These execute the production analytical
+SELECTs in DuckDB and test schema/orchestration/audit-retry contracts. They do not
+replace the real Spark/Delta suite. See [validation evidence](docs/phase3/VALIDATION.md).
 
 ## Proof that it works
 

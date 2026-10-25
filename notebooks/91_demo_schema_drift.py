@@ -50,6 +50,7 @@ cfg = PipelineConfig(
     bronze_schema="drift_demo_bronze",
     silver_schema="drift_demo_silver",
     ops_schema="drift_demo_ops",
+    gold_schema="drift_demo_gold",
 )
 for schema in cfg.schemas:
     spark.sql(f"DROP SCHEMA IF EXISTS {schema} CASCADE")

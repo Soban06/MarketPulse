@@ -11,13 +11,14 @@
 # MAGIC
 # MAGIC Creates:
 # MAGIC - `raw` schema + `landing` Volume: where `extract/upload.py` drops JSON batches
-# MAGIC - `bronze`, `silver`, `ops` schemas
-# MAGIC - every bronze and silver table defined in `marketpulse.schemas`, with column comments and keys
+# MAGIC - `bronze`, `silver`, `gold`, `ops` schemas
+# MAGIC - every Bronze/Silver/Gold table defined in `marketpulse.schemas`, with column comments and keys
 # MAGIC - `ops.pipeline_execution_logs`: the audit log every pipeline step writes to
 
 # COMMAND ----------
 
 dbutils.widgets.text("catalog", "workspace", "Catalog")
+dbutils.widgets.text("source_root", "", "Absolute src directory (empty in Git folder)")
 
 # COMMAND ----------
 
@@ -25,7 +26,7 @@ import os
 import sys
 
 # Git folder notebooks run with their own directory as cwd; make src/ importable
-sys.path.insert(0, os.path.abspath("../src"))
+sys.path.insert(0, dbutils.widgets.get("source_root").strip() or os.path.abspath("../src"))
 
 from marketpulse.config import PipelineConfig
 

@@ -1,0 +1,42 @@
+// Create each measure separately in Power BI. This is a handoff file, not a PBIX.
+// Closing-price chart requires a single ticker and one date per point.
+
+Closing Price =
+IF(HASONEVALUE(dim_ticker[ticker_key]), SELECTEDVALUE(fact_daily_market[close]))
+
+MA 7 =
+IF(HASONEVALUE(dim_ticker[ticker_key]), SELECTEDVALUE(fact_daily_market[ma_7]))
+
+MA 30 =
+IF(HASONEVALUE(dim_ticker[ticker_key]), SELECTEDVALUE(fact_daily_market[ma_30]))
+
+Trading Volume = SUM(fact_daily_market[volume])
+
+Absolute Daily Return = AVERAGE(fact_daily_market[abs_daily_return])
+
+Relative Volume = AVERAGE(fact_daily_market[relative_volume])
+
+Latest Observation = MAX(fact_daily_market[trade_date])
+
+Latest Close =
+VAR LastDay = MAX(fact_daily_market[trade_date])
+RETURN
+IF(HASONEVALUE(dim_ticker[ticker_key]),
+    CALCULATE(SELECTEDVALUE(fact_daily_market[close]), fact_daily_market[trade_date] = LastDay))
+
+Latest Volatility 30 =
+VAR LastDay = MAX(fact_daily_market[trade_date])
+RETURN
+IF(HASONEVALUE(dim_ticker[ticker_key]),
+    CALCULATE(SELECTEDVALUE(fact_daily_market[volatility_30]), fact_daily_market[trade_date] = LastDay))
+
+Execution Steps = COUNTROWS(vw_pipeline_execution)
+
+Failed Steps =
+CALCULATE(COUNTROWS(vw_pipeline_execution), vw_pipeline_execution[status] = "FAILED")
+
+Summed Step Seconds = SUM(vw_pipeline_execution[duration_seconds])
+
+Rejected Rows = SUM(vw_data_quality[rejected_rows])
+
+Price Revisions = COUNTROWS(vw_price_revisions)

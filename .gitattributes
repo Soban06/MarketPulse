@@ -1,0 +1,5 @@
+# Preserve artifact bytes on Windows; these formats must never receive CRLF conversion.
+*.pdf binary
+*.pbix binary
+*.png binary
+*.jpg binary

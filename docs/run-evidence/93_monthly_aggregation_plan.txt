@@ -1,0 +1,61 @@
+PHYSICAL PLAN (planned execution, not proof of actual runtime operators)
+== Physical Plan ==
+AdaptiveSparkPlan (10)
++- == Initial Plan ==
+   PhotonResultStage (9)
+   +- PhotonColumnarToRow (8)
+      +- PhotonGroupingAgg (7)
+         +- PhotonShuffleExchangeSource (6)
+            +- PhotonShuffleMapStage (5)
+               +- PhotonShuffleExchangeSink (4)
+                  +- PhotonGroupingAgg (3)
+                     +- PhotonProject (2)
+                        +- PhotonScan parquet workspace.gold.fact_daily_market (1)
+
+
+(1) PhotonScan parquet workspace.gold.fact_daily_market
+Output [5]: [ticker_key#214329L, trade_date#214331, volume#214337L, abs_daily_return#214339, relative_volume#214345]
+Location: PreparedDeltaFileIndex [<managed Delta storage path redacted>]
+ReadSchema: struct<ticker_key:bigint,trade_date:date,volume:bigint,abs_daily_return:double,relative_volume:double>
+
+(2) PhotonProject
+Input [5]: [ticker_key#214329L, trade_date#214331, volume#214337L, abs_daily_return#214339, relative_volume#214345]
+Arguments: [ticker_key#214329L, trade_date#214331, volume#214337L, abs_daily_return#214339, relative_volume#214345, cast(date_trunc(MONTH, cast(trade_date#214331 as timestamp), Some(Etc/UTC)) as date) AS _groupingexpression#214515]
+
+(3) PhotonGroupingAgg
+Input [6]: [ticker_key#214329L, trade_date#214331, volume#214337L, abs_daily_return#214339, relative_volume#214345, _groupingexpression#214515]
+Arguments: [ticker_key#214329L, _groupingexpression#214515], [partial_count(1) AS count#214693L, partial_sum(volume#214337L) AS sum#214695L, partial_avg(abs_daily_return#214339) AS (sum#214698, count#214699L), partial_stddev_samp(if (isnotnull(abs_daily_return#214339)) cast(volume#214337L as double) else null) AS (n#214521, avg#214522, m2#214523), partial_stddev_samp(if (isnotnull(volume#214337L)) abs_daily_return#214339 else null) AS (n#214529, avg#214530, m2#214531), partial_corr(cast(volume#214337L as double), abs_daily_return#214339) AS (n#214451, xAvg#214452, yAvg#214453, ck#214454, xMk#214455, yMk#214456), partial_stddev_samp(if (isnotnull(abs_daily_return#214339)) relative_volume#214345 else null) AS (n#214537, avg#214538, m2#214539), partial_stddev_samp(if (isnotnull(relative_volume#214345)) abs_daily_return#214339 else null) AS (n#214545, avg#214546, m2#214547), partial_corr(relative_volume#214345, abs_daily_return#214339) AS (n#214406, xAvg#214407, yAvg#214408, ck#214409, xMk#214410, yMk#214411), partial_count(CASE WHEN (isnotnull(volume#214337L) AND isnotnull(abs_daily_return#214339)) THEN 1 END) AS count#214701L, partial_count(CASE WHEN (isnotnull(relative_volume#214345) AND isnotnull(abs_daily_return#214339)) THEN 1 END) AS count#214703L, partial_min(trade_date#214331) AS min#214705, partial_max(trade_date#214331) AS max#214707], [count#214692L, sum#214694L, sum#214696, count#214697L, n#214516, avg#214517, m2#214518, n#214524, avg#214525, m2#214526, n#214445, xAvg#214446, yAvg#214447, ck#214448, xMk#214449, yMk#214450, n#214532, avg#214533, m2#214534, n#214540, avg#214541, m2#214542, n#214400, xAvg#214401, yAvg#214402, ... 7 more fields], [ticker_key#214329L, _groupingexpression#214515, count#214693L, sum#214695L, sum#214698, count#214699L, n#214521, avg#214522, m2#214523, n#214529, avg#214530, m2#214531, n#214451, xAvg#214452, yAvg#214453, ck#214454, xMk#214455, yMk#214456, n#214537, avg#214538, m2#214539, n#214545, avg#214546, m2#214547, n#214406, ... 9 more fields], false
+
+(4) PhotonShuffleExchangeSink
+Input [34]: [ticker_key#214329L, _groupingexpression#214515, count#214693L, sum#214695L, sum#214698, count#214699L, n#214521, avg#214522, m2#214523, n#214529, avg#214530, m2#214531, n#214451, xAvg#214452, yAvg#214453, ck#214454, xMk#214455, yMk#214456, n#214537, avg#214538, m2#214539, n#214545, avg#214546, m2#214547, n#214406, xAvg#214407, yAvg#214408, ck#214409, xMk#214410, yMk#214411, count#214701L, count#214703L, min#214705, max#214707]
+Arguments: hashpartitioning(ticker_key#214329L, _groupingexpression#214515, 137)
+
+(5) PhotonShuffleMapStage
+Input [34]: [ticker_key#214329L, _groupingexpression#214515, count#214693L, sum#214695L, sum#214698, count#214699L, n#214521, avg#214522, m2#214523, n#214529, avg#214530, m2#214531, n#214451, xAvg#214452, yAvg#214453, ck#214454, xMk#214455, yMk#214456, n#214537, avg#214538, m2#214539, n#214545, avg#214546, m2#214547, n#214406, xAvg#214407, yAvg#214408, ck#214409, xMk#214410, yMk#214411, count#214701L, count#214703L, min#214705, max#214707]
+Arguments: ENSURE_REQUIREMENTS, [id=#135339]
+
+(6) PhotonShuffleExchangeSource
+Input [34]: [ticker_key#214329L, _groupingexpression#214515, count#214693L, sum#214695L, sum#214698, count#214699L, n#214521, avg#214522, m2#214523, n#214529, avg#214530, m2#214531, n#214451, xAvg#214452, yAvg#214453, ck#214454, xMk#214455, yMk#214456, n#214537, avg#214538, m2#214539, n#214545, avg#214546, m2#214547, n#214406, xAvg#214407, yAvg#214408, ck#214409, xMk#214410, yMk#214411, count#214701L, count#214703L, min#214705, max#214707]
+Arguments: false
+
+(7) PhotonGroupingAgg
+Input [34]: [ticker_key#214329L, _groupingexpression#214515, count#214693L, sum#214695L, sum#214698, count#214699L, n#214521, avg#214522, m2#214523, n#214529, avg#214530, m2#214531, n#214451, xAvg#214452, yAvg#214453, ck#214454, xMk#214455, yMk#214456, n#214537, avg#214538, m2#214539, n#214545, avg#214546, m2#214547, n#214406, xAvg#214407, yAvg#214408, ck#214409, xMk#214410, yMk#214411, count#214701L, count#214703L, min#214705, max#214707]
+Arguments: [ticker_key#214329L, _groupingexpression#214515], [finalmerge_count(merge count#214693L) AS count(1)#214348L, finalmerge_sum(merge sum#214695L) AS sum(volume)#214349L, finalmerge_avg(merge sum#214698, count#214699L) AS avg(abs_daily_return)#214350, finalmerge_stddev_samp(merge n#214521, avg#214522, m2#214523) AS stddev_samp((IF((abs_daily_return IS NOT NULL), volume, NULL)))#214359, finalmerge_stddev_samp(merge n#214529, avg#214530, m2#214531) AS stddev_samp((IF((volume IS NOT NULL), abs_daily_return, NULL)))#214368, finalmerge_corr(merge n#214451, xAvg#214452, yAvg#214453, ck#214454, xMk#214455, yMk#214456) AS corr(volume, abs_daily_return)#214381, finalmerge_stddev_samp(merge n#214537, avg#214538, m2#214539) AS stddev_samp((IF((abs_daily_return IS NOT NULL), relative_volume, NULL)))#214390, finalmerge_stddev_samp(merge n#214545, avg#214546, m2#214547) AS stddev_samp((IF((relative_volume IS NOT NULL), abs_daily_return, NULL)))#214399, finalmerge_corr(merge n#214406, xAvg#214407, yAvg#214408, ck#214409, xMk#214410, yMk#214411) AS corr(relative_volume, abs_daily_return)#214412, finalmerge_count(merge count#214701L) AS count(CASE WHEN ((volume IS NOT NULL) AND (abs_daily_return IS NOT NULL)) THEN 1 END)#214413L, finalmerge_count(merge count#214703L) AS count(CASE WHEN ((relative_volume IS NOT NULL) AND (abs_daily_return IS NOT NULL)) THEN 1 END)#214414L, finalmerge_min(merge min#214705) AS min(trade_date)#214415, finalmerge_max(merge max#214707) AS max(trade_date)#214416], [count(1)#214348L, sum(volume)#214349L, avg(abs_daily_return)#214350, stddev_samp((IF((abs_daily_return IS NOT NULL), volume, NULL)))#214359, stddev_samp((IF((volume IS NOT NULL), abs_daily_return, NULL)))#214368, corr(volume, abs_daily_return)#214381, stddev_samp((IF((abs_daily_return IS NOT NULL), relative_volume, NULL)))#214390, stddev_samp((IF((relative_volume IS NOT NULL), abs_daily_return, NULL)))#214399, corr(relative_volume, abs_daily_return)#214412, count(CASE WHEN ((volume IS NOT NULL) AND (abs_daily_return IS NOT NULL)) THEN 1 END)#214413L, count(CASE WHEN ((relative_volume IS NOT NULL) AND (abs_daily_return IS NOT NULL)) THEN 1 END)#214414L, min(trade_date)#214415, max(trade_date)#214416], [ticker_key#214329L, cast((((year(_groupingexpression#214515) * 10000) + (month(_groupingexpression#214515) * 100)) + 1) as bigint) AS date_key#214292L, _groupingexpression#214515 AS month_start#214293, count(1)#214348L AS observation_count#214294L, sum(volume)#214349L AS total_volume#214295L, avg(abs_daily_return)#214350 AS avg_abs_daily_return#214296, CASE WHEN ((stddev_samp((IF((abs_daily_return IS NOT NULL), volume, NULL)))#214359 > 0.0) AND (stddev_samp((IF((volume IS NOT NULL), abs_daily_return, NULL)))#214368 > 0.0)) THEN corr(volume, abs_daily_return)#214381 END AS volume_return_correlation#214297, CASE WHEN ((stddev_samp((IF((abs_daily_return IS NOT NULL), relative_volume, NULL)))#214390 > 0.0) AND (stddev_samp((IF((relative_volume IS NOT NULL), abs_daily_return, NULL)))#214399 > 0.0)) THEN corr(relative_volume, abs_daily_return)#214412 END AS relative_volume_return_correlation#214298, count(CASE WHEN ((volume IS NOT NULL) AND (abs_daily_return IS NOT NULL)) THEN 1 END)#214413L AS volume_return_pairs#214299L, count(CASE WHEN ((relative_volume IS NOT NULL) AND (abs_daily_return IS NOT NULL)) THEN 1 END)#214414L AS relative_volume_return_pairs#214300L, min(trade_date)#214415 AS first_observation#214301, max(trade_date)#214416 AS last_observation#214302], true
+
+(8) PhotonColumnarToRow
+Input [12]: [ticker_key#214329L, date_key#214292L, month_start#214293, observation_count#214294L, total_volume#214295L, avg_abs_daily_return#214296, volume_return_correlation#214297, relative_volume_return_correlation#214298, volume_return_pairs#214299L, relative_volume_return_pairs#214300L, first_observation#214301, last_observation#214302]
+
+(9) PhotonResultStage
+Input [12]: [ticker_key#214329L, date_key#214292L, month_start#214293, observation_count#214294L, total_volume#214295L, avg_abs_daily_return#214296, volume_return_correlation#214297, relative_volume_return_correlation#214298, volume_return_pairs#214299L, relative_volume_return_pairs#214300L, first_observation#214301, last_observation#214302]
+
+(10) AdaptiveSparkPlan
+Output [12]: [ticker_key#214329L, date_key#214292L, month_start#214293, observation_count#214294L, total_volume#214295L, avg_abs_daily_return#214296, volume_return_correlation#214297, relative_volume_return_correlation#214298, volume_return_pairs#214299L, relative_volume_return_pairs#214300L, first_observation#214301, last_observation#214302]
+Arguments: isFinalPlan=false
+
+
+== Photon Explanation ==
+The query is fully supported by Photon.
+== Optimizer Statistics (table names per statistics state) ==
+  missing =
+  partial =
+  full    = fact_daily_market
