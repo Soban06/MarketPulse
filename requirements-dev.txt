@@ -1,0 +1,7 @@
+# Analytical SQL tests run without a Spark cluster; workspace integration tests
+# are in notebooks/82_test_gold.py and must also pass before submission.
+duckdb>=1.4,<2
+pyspark-client>=4.0,<5
+PyYAML>=6,<7
+reportlab>=4,<5
+pypdf>=5,<7

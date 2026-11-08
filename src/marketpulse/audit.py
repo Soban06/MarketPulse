@@ -38,7 +38,7 @@ from pyspark.sql.types import (
 
 EXECUTION_LOG_TABLE = "pipeline_execution_logs"
 
-LAYERS = ("source_to_raw", "raw_to_bronze", "bronze_to_silver")
+LAYERS = ("source_to_raw", "raw_to_bronze", "bronze_to_silver", "silver_to_gold")
 LOAD_TYPES = ("full", "incremental", "backfill")
 STATUSES = ("RUNNING", "SUCCESS", "FAILED", "SKIPPED")
 
@@ -50,7 +50,7 @@ def _field(name, data_type, comment, nullable=True):
 EXECUTION_LOG_SCHEMA = StructType([
     _field("log_id", StringType(), "Unique id of this log entry (primary key)", nullable=False),
     _field("pipeline_run_id", StringType(), "Groups every entry written by one notebook or job run"),
-    _field("layer", StringType(), "source_to_raw | raw_to_bronze | bronze_to_silver"),
+    _field("layer", StringType(), "source_to_raw | raw_to_bronze | bronze_to_silver | silver_to_gold"),
     _field("load_type", StringType(), "full | incremental | backfill"),
     _field("batch_id", StringType(), "Landing batch processed, e.g. 20261010T132844Z_full"),
     _field("parameter", StringType(), "Exact input processed: a Volume path or the backfill parameters"),
@@ -63,6 +63,8 @@ EXECUTION_LOG_SCHEMA = StructType([
     _field("rows_inserted", LongType(), "Rows inserted into the target"),
     _field("rows_updated", LongType(), "Existing target rows updated"),
     _field("rows_quarantined", LongType(), "Rows rejected to a quarantine table"),
+    _field("rows_aggregated", LongType(), "Output groups computed by an aggregate step; null for non-aggregate steps"),
+    _field("rows_deleted", LongType(), "Rows deleted from target by a snapshot reconciliation"),
     _field("error_message", StringType(), "Exception (FAILED) or warning text"),
     _field("executed_by", StringType(), "Databricks identity that ran the step"),
     _field("load_timestamp", TimestampType(), "When this log row was last written"),
@@ -83,6 +85,16 @@ def create_execution_log_table(spark, cfg):
         )
         COMMENT 'One row per pipeline step: layer, batch, timings, status and row counts'
     """)
+    # CREATE IF NOT EXISTS does not migrate a Phase 2 table. Add only new metrics;
+    # old rows keep NULL (unknown), rather than invented zero counts.
+    actual = set(spark.table(cfg.ops(EXECUTION_LOG_TABLE)).schema.fieldNames())
+    missing = [f for f in EXECUTION_LOG_SCHEMA.fields if f.name not in actual]
+    if missing:
+        columns = ", ".join(
+            f"{f.name} {f.dataType.simpleString()} COMMENT '{f.metadata['comment']}'"
+            for f in missing
+        )
+        spark.sql(f"ALTER TABLE {cfg.ops(EXECUTION_LOG_TABLE)} ADD COLUMNS ({columns})")
 
 
 def _now() -> datetime:
@@ -117,13 +129,15 @@ class StepLog:
     rows_inserted: int | None = None
     rows_updated: int | None = None
     rows_quarantined: int | None = None
+    rows_aggregated: int | None = None
+    rows_deleted: int | None = None
     error_message: str | None = None
     _logger: Any = field(default=None, repr=False)
     _start_version: int | None = field(default=None, repr=False)
 
     def record(self, **counts: int):
         """Set row counts, e.g. log.record(rows_read=n, rows_quarantined=q)."""
-        allowed = {"rows_read", "rows_inserted", "rows_updated", "rows_quarantined"}
+        allowed = {"rows_read", "rows_inserted", "rows_updated", "rows_quarantined", "rows_aggregated", "rows_deleted"}
         unknown = set(counts) - allowed
         if unknown:
             raise ValueError(f"Unknown count(s) {sorted(unknown)}; expected {sorted(allowed)}")
@@ -188,6 +202,8 @@ class AuditLogger:
                 self._write(log)
             except Exception as write_error:  # never mask the step's own outcome
                 print(f"WARNING: could not update audit log {log.log_id}: {_format_error(write_error)}")
+                if log.status == "SUCCESS":
+                    raise RuntimeError("Work committed but its final audit status could not be saved; retry the run") from write_error
 
     # ------------------------------------------------------------ delta metrics
 
@@ -218,12 +234,13 @@ class AuditLogger:
             .select("version", "operation", "operationMetrics")
             .collect()
         )
-        totals = {"rows_inserted": 0, "rows_updated": 0}
+        totals = {"rows_inserted": 0, "rows_updated": 0, "rows_deleted": 0}
         for commit in commits:
             metrics = {k: int(v) for k, v in (commit["operationMetrics"] or {}).items() if str(v).isdigit()}
             if commit["operation"] in _MERGE_OPS:
                 totals["rows_inserted"] += metrics.get("numTargetRowsInserted", 0)
                 totals["rows_updated"] += metrics.get("numTargetRowsUpdated", 0)
+                totals["rows_deleted"] += metrics.get("numTargetRowsDeleted", 0)
                 totals["rows_read"] = totals.get("rows_read", 0) + metrics.get("numSourceRows", 0)
             elif commit["operation"] in _WRITE_OPS:
                 totals["rows_inserted"] += metrics.get("numOutputRows", 0)
@@ -236,6 +253,8 @@ class AuditLogger:
 
         With `target_table`, only steps writing that table count -- so in a layer
         with several targets, one table's success can't mark another's batch done.
+        Only the latest attempt of each target counts within a job run; a failed
+        attempt followed by a successful automatic retry must be considered done.
         """
         target_filter = "AND target_table = :target" if target_table else ""
         args = {"layer": layer, **({"target": target_table} if target_table else {})}
@@ -246,12 +265,19 @@ class AuditLogger:
                 WHERE layer = :layer {target_filter} AND batch_id IS NOT NULL
                 GROUP BY batch_id
             )
-            SELECT l.batch_id
-            FROM {self.table} l
-            JOIN latest ON l.batch_id = latest.batch_id AND l.pipeline_run_id = latest.run_id
-            WHERE l.layer = :layer {target_filter}
-            GROUP BY l.batch_id
-            HAVING count_if(l.status <> 'SUCCESS') = 0
+            , attempts AS (
+                SELECT l.batch_id, l.status,
+                       row_number() OVER (
+                           PARTITION BY l.batch_id, l.target_table
+                           ORDER BY l.start_time DESC, l.log_id DESC
+                       ) AS attempt_rank
+                FROM {self.table} l
+                JOIN latest ON l.batch_id = latest.batch_id AND l.pipeline_run_id = latest.run_id
+                WHERE l.layer = :layer {target_filter}
+            )
+            SELECT batch_id FROM attempts WHERE attempt_rank = 1
+            GROUP BY batch_id
+            HAVING count_if(status <> 'SUCCESS') = 0
         """, args=args).collect()
         return {r["batch_id"] for r in rows}
 

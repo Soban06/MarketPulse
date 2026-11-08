@@ -5,7 +5,7 @@
 # MAGIC Checks `marketpulse.schemas` against Databricks and against real landed data:
 # MAGIC every table can be created from its spec with the declared types and comments, and every
 # MAGIC raw file reads cleanly with its explicit schema (no inference, no rescued columns).
-# MAGIC Tables are created in throwaway `bronze_test` / `silver_test` schemas.
+# MAGIC Tables are created in throwaway `bronze_test` / `silver_test` / `gold_test` schemas.
 # MAGIC
 # MAGIC | Parameter | Default | Meaning |
 # MAGIC |---|---|---|
@@ -30,8 +30,8 @@ from marketpulse import schemas as s
 from marketpulse.config import PipelineConfig
 
 cfg = PipelineConfig(catalog=dbutils.widgets.get("catalog"),
-                     bronze_schema="bronze_test", silver_schema="silver_test")
-for schema in (cfg.bronze_schema, cfg.silver_schema):
+                     bronze_schema="bronze_test", silver_schema="silver_test", gold_schema="gold_test")
+for schema in (cfg.bronze_schema, cfg.silver_schema, cfg.gold_schema):
     spark.sql(f"DROP SCHEMA IF EXISTS {cfg.catalog}.{schema} CASCADE")
     spark.sql(f"CREATE SCHEMA {cfg.catalog}.{schema}")
 
@@ -113,6 +113,6 @@ print("All schema checks passed")
 # COMMAND ----------
 
 if dbutils.widgets.get("cleanup") == "true":
-    for schema in (cfg.bronze_schema, cfg.silver_schema):
+    for schema in (cfg.bronze_schema, cfg.silver_schema, cfg.gold_schema):
         spark.sql(f"DROP SCHEMA {cfg.catalog}.{schema} CASCADE")
     print("Dropped test schemas")

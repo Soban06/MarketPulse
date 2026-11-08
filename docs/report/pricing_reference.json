@@ -1,0 +1,31 @@
+{
+  "retrieved_on": "2026-10-25",
+  "source": "https://prices.azure.com/api/retail/prices",
+  "filter": "serviceName eq 'Azure Databricks' and armRegionName eq 'eastus'",
+  "api_version": "2023-01-01-preview",
+  "note": "Public Azure scenario prices, not current AWS Free Edition billing or measured usage.",
+  "items": [
+    {
+      "currencyCode": "USD",
+      "armRegionName": "eastus",
+      "productName": "Azure Databricks Regional",
+      "skuName": "Premium Serverless SQL",
+      "meterName": "Premium Serverless SQL DBU",
+      "retailPrice": 0.7,
+      "unitOfMeasure": "1 Hour",
+      "effectiveStartDate": "2024-02-01T00:00:00Z",
+      "type": "Consumption"
+    },
+    {
+      "currencyCode": "USD",
+      "armRegionName": "eastus",
+      "productName": "Azure Databricks Regional",
+      "skuName": "Premium Automated Serverless Compute",
+      "meterName": "Premium Automated Serverless Compute DBU",
+      "retailPrice": 0.45,
+      "unitOfMeasure": "1 Hour",
+      "effectiveStartDate": "2025-05-01T00:00:00Z",
+      "type": "Consumption"
+    }
+  ]
+}

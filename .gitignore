@@ -3,6 +3,8 @@ __pycache__/
 *.pyc
 .venv/
 venv/
+.databricks/
+tmp/
 
 # Landing batches are local to whoever extracted them (hundreds of MB); a tracked
 # manifest without its data would look like a complete batch to upload.py

@@ -30,6 +30,7 @@ from marketpulse.schemas import (  # noqa: E402
     CONSTITUENTS_FIELDS,
     PRICES_FIELDS,
     SILVER_TABLES,
+    GOLD_TABLES,
 )
 
 
@@ -50,9 +51,11 @@ def column_table(schema) -> list[str]:
 def table_section(spec) -> list[str]:
     key = ", ".join(f"`{k}`" for k in spec.key)
     if spec.enforce_key:
-        key_line = f"**Primary key:** {key} (enforced: `NOT NULL` + `PRIMARY KEY` constraint)"
+        key_line = f"**Primary key:** {key} (`NOT NULL` enforced; primary key informational; uniqueness checked by pipeline)"
     else:
         key_line = f"**Grain:** {key} (documented, not enforced)"
+    relationships = [f"**Foreign key:** `{column}` -> `{spec.layer}.{dimension}.{referenced}`"
+                     for column, dimension, referenced in spec.foreign_keys]
     return [
         f"#### `{spec.layer}.{spec.name}`",
         "",
@@ -60,6 +63,8 @@ def table_section(spec) -> list[str]:
         "",
         key_line,
         "",
+        *relationships,
+        *([""] if relationships else []),
         *column_table(spec.schema),
         "",
     ]
@@ -90,6 +95,10 @@ def build() -> str:
     for spec in SILVER_TABLES:
         lines += table_section(spec)
 
+    lines += ["### Gold tables", ""]
+    for spec in GOLD_TABLES:
+        lines += table_section(spec)
+
     lines += [
         "### Operational tables",
         "",
@@ -97,7 +106,7 @@ def build() -> str:
         "",
         "One row per pipeline step (batch × source → target table) across every layer.",
         "",
-        "**Primary key:** `log_id` (enforced)",
+        "**Primary key:** `log_id` (`NOT NULL` enforced; primary key informational)",
         "",
         *column_table(EXECUTION_LOG_SCHEMA),
         "",
@@ -112,7 +121,7 @@ def main():
     before, rest = text.split(START, 1)
     _, after = rest.split(END, 1)
     README.write_text(f"{before}{START}\n\n{build()}\n{END}{after}", encoding="utf-8")
-    print(f"Updated {README.name}: {len(BRONZE_TABLES)} bronze, {len(SILVER_TABLES)} silver, 1 ops table")
+    print(f"Updated {README.name}: {len(BRONZE_TABLES)} bronze, {len(SILVER_TABLES)} silver, {len(GOLD_TABLES)} gold, 1 ops table")
 
 
 if __name__ == "__main__":

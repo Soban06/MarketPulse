@@ -1,1 +1,1 @@
-"""MarketPulse PySpark pipeline: raw landing -> bronze -> silver Delta tables on Databricks."""
+"""MarketPulse PySpark pipeline: raw landing -> Bronze -> Silver -> Gold on Databricks."""

@@ -23,6 +23,7 @@ class PipelineConfig:
     silver_schema: str = "silver"
     ops_schema: str = "ops"
     landing_volume: str = "landing"
+    gold_schema: str = "gold"
 
     def __post_init__(self):
         # names are interpolated into SQL, so reject anything that isn't a plain identifier
@@ -54,6 +55,9 @@ class PipelineConfig:
     def ops(self, table: str) -> str:
         return f"{self.catalog}.{self.ops_schema}.{table}"
 
+    def gold(self, table: str) -> str:
+        return f"{self.catalog}.{self.gold_schema}.{table}"
+
     @property
     def schemas(self) -> dict[str, str]:
         """Fully qualified schema name -> what it holds."""
@@ -61,5 +65,6 @@ class PipelineConfig:
             f"{self.catalog}.{self.raw_schema}": "Raw landing zone: JSON batches exactly as extracted",
             f"{self.catalog}.{self.bronze_schema}": "Bronze: raw records as Delta tables, explicit STRING schemas",
             f"{self.catalog}.{self.silver_schema}": "Silver: typed, deduplicated tables MERGEd on natural keys",
+            f"{self.catalog}.{self.gold_schema}": "Gold: dimensional market analytics for Power BI",
             f"{self.catalog}.{self.ops_schema}": "Operational tables: pipeline execution logs",
         }
