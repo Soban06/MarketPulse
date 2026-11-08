@@ -60,6 +60,7 @@ def missing_evidence(e):
     for name, path in [("DAG screenshot", dag.get("image")),
                        ("Power BI file", e.get("power_bi", {}).get("pbix_path")),
                        ("dashboard screenshot", e.get("power_bi", {}).get("dashboard_image")),
+                       ("pipeline health screenshot", e.get("power_bi", {}).get("pipeline_health_image")),
                        ("Power BI model screenshot", e.get("power_bi", {}).get("model_image"))]:
         if not path or not resolved(path).is_file() or resolved(path).stat().st_size == 0:
             missing.append(name)
@@ -431,9 +432,17 @@ def build(e, final=False, submission=False):
         add("The remaining file and screenshots may be appended after completion, subject to "
             "the TA's submission arrangements. No dashboard images, interactive behavior or "
             "Power BI relationship settings have been fabricated.")
-    else:
+    elif not final:
         figure(bi.get('dashboard_image'),"Saad's dashboard screenshot pending: price + MA7/30, relative volatility, volume versus absolute return, and pipeline/error visuals.",185)
         figure(bi.get('model_image'),"Saad's Model-view screenshot pending: one-to-many single-direction relationships from Date and Ticker to facts.",150)
+    if final:
+        add("The completed Power BI Desktop report and PBIX are supplied. Soban confirmed the "
+            "refresh and slicer checks and approved the three final screenshots on 8 November 2026. "
+            "This confirmation is supplied by the project owner; the report builder does not "
+            "execute Power BI Desktop.")
+        figure(bi.get('dashboard_image'), "Market analysis screenshot missing", 310)
+        add("Figure 9. Market analysis: selected-ticker close and MA7/MA30, cross-ticker latest "
+            "volatility, ticker-date volume/absolute-return scatter, KPI cards and slicers.", "MPSmall")
     add(("The specified Power BI design uses a direct Databricks SQL warehouse connection in Import "
          if submission else "Power BI Desktop connects directly to the Databricks SQL warehouse using Import ") +
         "mode. A single-ticker price chart avoids summing company prices. Risk comparisons "
@@ -447,7 +456,25 @@ def build(e, final=False, submission=False):
         "deliverable and the architecture PDF. The checked-in handoff guide lists the exact "
         "connections, measures and remaining screenshots.","MPSmall")
 
-    page(10,"References and evidence register")
+    if final:
+        page(10, "Power BI pipeline health")
+        figure(bi.get('pipeline_health_image'), "Pipeline health screenshot missing", 390)
+        add("Figure 10. Operational dashboard with execution statuses, summed step duration, "
+            "rejected-row reasons, revision counts and refresh information.", "MPSmall")
+        add("The displayed latest market observation is 23 October 2026; the displayed import "
+            "refresh is 8 November 2026 at 11:08:13. A successful Import refresh reloads the "
+            "available Gold data; it does not itself extract new market observations. The "
+            "screenshot includes historical and demo run identifiers, so its status counts "
+            "describe the selected log history rather than only the latest production run.")
+        page(11, "Power BI model relationships")
+        figure(bi.get('model_image'), "Model screenshot missing", 420)
+        add("Figure 11. Actual Power BI Model view: Date and Ticker dimensions filter daily "
+            "market facts and price revisions through one-to-many relationships. Execution, "
+            "data-quality and refresh-information tables remain separate.", "MPSmall")
+        add("Deliverable: bi/MarketPulse.pbix, stored using Git LFS. The model screenshot "
+            "documents the Desktop relationship layout; the Gold star schema alone was not "
+            "used as a substitute for this evidence.")
+    page(12 if final else 10,"References and evidence register")
     references=[
         ("Project source and version history","https://github.com/Soban06/MarketPulse"),
         ("Databricks constraint semantics","https://docs.databricks.com/aws/en/tables/constraints"),
@@ -503,7 +530,7 @@ def main():
     missing=missing_evidence(evidence)
     if args.final and missing:
         parser.error("Final report blocked by missing real evidence:\n- " + "\n- ".join(missing))
-    engineering_missing=[m for m in missing if m not in ('Power BI file','dashboard screenshot','Power BI model screenshot')]
+    engineering_missing=[m for m in missing if m not in ('Power BI file','dashboard screenshot','pipeline health screenshot','Power BI model screenshot')]
     if args.submission and engineering_missing:
         parser.error("Engineering evidence is incomplete:\n- " + "\n- ".join(engineering_missing))
     print(build(evidence,final=args.final,submission=args.submission))

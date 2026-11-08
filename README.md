@@ -14,12 +14,12 @@ with PySpark and Delta Lake.
 **Phase 3:** Gold is built and validated in Databricks: the saved run contains
 **1,230,497 daily fact rows and 59,004 monthly groups**. The isolated Gold suite
 passed on serverless, and 38 local checks passed. Real notebook outputs are saved
-in `docs/run-evidence/`. Saad's PBIX and the report screenshots are still pending.
-Start with [Soban and Saad's next steps](docs/phase3/START_HERE.md).
-The [architecture report](output/pdf/MarketPulse_Architecture_Report.pdf) is ready
-to submit for the completed engineering work and explicitly identifies Power BI
-as pending. Saad's dashboard deliverable remains outstanding; the report does not
-claim that all Phase 3 requirements have been fulfilled.
+in `docs/run-evidence/`. Saad's [PBIX](bi/MarketPulse.pbix) and all three final
+Power BI screenshots are supplied. Soban confirmed completion on 8 November 2026.
+The [final architecture report](output/pdf/MarketPulse_Architecture_Report.pdf)
+includes market analysis, pipeline health and the actual Power BI Model view.
+See [the evidence register](docs/report/evidence.json) and
+[reproduction steps](docs/phase3/START_HERE.md).
 
 ## Architecture
 

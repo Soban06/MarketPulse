@@ -38,8 +38,15 @@
   },
   "power_bi": {
     "pbix_path": "bi/MarketPulse.pbix",
-    "dashboard_image": null,
-    "model_image": null
+    "dashboard_image": "docs/report/images/market-analysis-final.jpg",
+    "model_image": "docs/report/images/model-relationships-final.jpg",
+    "pipeline_health_image": "docs/report/images/pipeline-health-final.jpg",
+    "completion_confirmed_by": "Soban",
+    "completion_confirmed_date": "2026-11-08",
+    "confirmation": "Soban confirmed refresh/slicer checks completed and these three screenshots are final.",
+    "latest_observation": "2026-10-23",
+    "displayed_refresh_timestamp": "2026-11-08 11:08:13",
+    "provenance": "Final screenshots supplied by Soban in chat; PBIX supplied through Git LFS on GitHub."
   },
   "finops": {
     "platform": "Databricks Free Edition",

@@ -1,4 +1,10 @@
-# Architecture report
+# Final report status - 8 November 2026
+
+The PBIX and final screenshots are supplied. Soban confirmed completion and approved
+all three screenshots. Build the full report with `python scripts/build_report.py --final`.
+The screenshot refresh date is distinct from the latest market observation date.
+
+# Report build reference
 
 Default output is a **DRAFT** until all required evidence is supplied. The explicit
 `--submission` mode below publishes the completed engineering scope with BI pending.
@@ -19,15 +25,11 @@ Final output: `output/pdf/MarketPulse_Architecture_Report.pdf`.
 The script is the editable source for the report. It generates architecture and
 star-schema diagrams directly as vectors and embeds actual screenshots when supplied.
 
-## Current submission version
+## Historical engineering-only mode
 
-Soban requested a report submission before the delayed Power BI deliverable.
-Run `python scripts/build_report.py --submission` to create
-`output/pdf/MarketPulse_Architecture_Report.pdf` for the completed engineering scope.
-It requires all real engineering evidence, labels Power BI as pending on the cover
-and footers, and documents the outstanding BI work in Section 9. It does not pretend
-the overall Phase 3 submission is complete. `--final` still requires the actual
-PBIX and dashboard/model screenshots for a fully completed package.
+`--submission` is retained for reproducing the earlier engineering-only report.
+Use `--final` for the current complete package; it includes all three approved
+Power BI screenshots and requires the supplied PBIX.
 
 ## Evidence to enter
 

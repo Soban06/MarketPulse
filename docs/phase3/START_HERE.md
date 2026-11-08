@@ -5,13 +5,14 @@ tests passed, and the complete pipeline processed the fresh 11,063-row batch.
 Gold now has 1,230,497 daily rows and 59,004 monthly groups. Exports with actual
 outputs are saved in docs/run-evidence. Power BI is Saad's part.
 
-**Your immediate remaining work:** give Saad [the connection details](../../bi/CONNECTION.md)
-and [his guide](POWER_BI_HANDOFF.md), then collect his PBIX and dashboard/model screenshots.
-Your [DAG screenshot](DAG_SCREENSHOT.md) has been added to the report and instructor acceptance is confirmed.
-The architecture report is available for submission with Power BI explicitly pending.
-Its BI section can be completed when the remaining screenshots and PBIX arrive.
-The steps below let you reproduce
-the completed engineering work or run future batches; you do not need to redo Phase 1/2.
+**Submission package complete:** Saad's PBIX is in `bi/MarketPulse.pbix` (Git LFS).
+Soban approved the final market-analysis, pipeline-health and model screenshots
+and confirmed completion on 8 November 2026. The final architecture report embeds
+all three screenshots from `docs/report/images/`.
+The accepted Query Profile evidence is included as well.
+Rebuild with `python scripts/build_report.py --final`.
+
+The steps below reproduce the engineering work and describe future refreshes.
 
 ## Soban: first run
 
@@ -87,11 +88,7 @@ Refresh only after Soban confirms the entire pipeline run succeeded.
 
 - Repository: https://github.com/Soban06/MarketPulse (push the final reviewed changes).
 - Saad's `bi/MarketPulse.pbix`.
-- `output/pdf/MarketPulse_Architecture_Report.pdf`: current engineering submission
-  generated with `--submission`, explicitly marking BI pending. Regenerate with
-  `--final` after the remaining Power BI artifacts are supplied.
+- `output/pdf/MarketPulse_Architecture_Report.pdf`: final submission generated with `--final`, including the approved BI screenshots.
 - Keep actual notebook exports and screenshots in the repo as evidence.
 
-The present local checks do not certify that Gold has run in Databricks. Do not
-submit the DRAFT PDF as the completed Phase 3 report. The current engineering PDF
-is a scoped submission and explicitly records the outstanding dashboard work.
+The present local checks do not certify that Gold has run in Databricks. Submit the final PDF, not the historical DRAFT version.
